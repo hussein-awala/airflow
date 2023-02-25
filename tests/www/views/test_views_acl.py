@@ -254,6 +254,7 @@ def test_dag_autocomplete_success(client_all_dags):
         {"name": "test_mapped_taskflow", "type": "dag"},
         {"name": "tutorial_taskflow_api", "type": "dag"},
         {"name": "tutorial_taskflow_api_virtualenv", "type": "dag"},
+        {"name": "example_dynamic_task_mapping_with_no_taskflow_operators", "type": "dag"},
     ]
 
 
