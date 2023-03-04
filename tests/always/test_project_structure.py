@@ -273,6 +273,7 @@ class TestGoogleProviderProjectStructure(ExampleCoverageTest, AssetsCoverageTest
         "airflow.providers.google.cloud.operators.cloud_sql.CloudSQLBaseOperator",
         "airflow.providers.google.cloud.operators.dataproc.DataprocJobBaseOperator",
         "airflow.providers.google.cloud.operators.vertex_ai.custom_job.CustomTrainingJobBaseOperator",
+        "airflow.providers.google.cloud.operators.cloud_base.GoogleCloudBaseOperator",
     }
 
     MISSING_EXAMPLES_FOR_CLASSES = {
@@ -414,6 +415,15 @@ class TestElasticsearchProviderProjectStructure(ExampleCoverageTest):
     CLASS_SUFFIXES = ["Hook"]
     DEPRECATED_CLASSES = {
         "airflow.providers.elasticsearch.hooks.elasticsearch.ElasticsearchHook",
+    }
+
+
+class TestCncfProviderProjectStructure(ExampleCoverageTest):
+    PROVIDER = "cncf"
+    CLASS_DIRS = ProjectStructureTest.CLASS_DIRS
+    DEPRECATED_CLASSES = {
+        "airflow.providers.cncf.kubernetes.operators.kubernetes_pod",
+        "airflow.providers.cncf.kubernetes.triggers.kubernetes_pod",
     }
 
 
