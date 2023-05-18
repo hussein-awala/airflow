@@ -838,12 +838,15 @@ class KubernetesExecutor(BaseExecutor):
         for scheduler_job_id in scheduler_job_ids:
             scheduler_job_id = pod_generator.make_safe_label_value(str(scheduler_job_id))
             # We will look for any pods owned by the no-longer-running scheduler,
-            # but will exclude only successful pods, as those TIs will have a terminal state
-            # and not be up for adoption!
+            # but will exclude:
+            # - successful pods: as those TIs will have a terminal
+            #   state and not be up for adoption!
+            # - running pods: as those TIs were running after marked
+            #   them as orphaned, and no need to adopt them
             # Those workers that failed, however, are okay to adopt here as their TI will
             # still be in queued.
             query_kwargs = {
-                "field_selector": "status.phase!=Succeeded",
+                "field_selector": "status.phase!=Running,status.phase!=Succeeded",
                 "label_selector": (
                     "kubernetes_executor=True,"
                     f"airflow-worker={scheduler_job_id},{POD_EXECUTOR_DONE_KEY}!=True"
