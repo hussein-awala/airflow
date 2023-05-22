@@ -60,6 +60,16 @@ class TestConnection:
                 "",
                 {"deploy-mode": "cluster"},
             ),
+            (
+                "type://user:pass@scheme://host:port?param=value",
+                "type",
+                "scheme://host",
+                "user",
+                "pass",
+                "port",
+                "",
+                {"param": "value"},
+            ),
         ],
     )
     def test_parse_from_uri(
