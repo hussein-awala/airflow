@@ -187,10 +187,16 @@ class Connection(Base, LoggingMixin):
         return conn_type
 
     def _parse_from_uri(self, uri: str):
+        scheme_in_uri = uri.count("://") > 1
         uri_parts = urlsplit(uri)
         conn_type = uri_parts.scheme
         self.conn_type = self._normalize_conn_type(conn_type)
-        self.host = _parse_netloc_to_hostname(uri_parts)
+        if not scheme_in_uri:
+            self.host = _parse_netloc_to_hostname(uri_parts)
+        else:
+            rest_of_the_url = uri.replace(f"{conn_type}://", "")
+            uri_parts = urlsplit(rest_of_the_url)
+            self.host = f"{uri_parts.scheme}://" + _parse_netloc_to_hostname(uri_parts)
         quoted_schema = uri_parts.path[1:]
         self.schema = unquote(quoted_schema) if quoted_schema else quoted_schema
         self.login = unquote(uri_parts.username) if uri_parts.username else uri_parts.username
