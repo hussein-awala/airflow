@@ -474,3 +474,12 @@ class Connection(Base, LoggingMixin):
             except ValueError:
                 raise ValueError(f"Expected integer value for `port`, but got {port!r} instead.")
         return Connection(conn_id=conn_id, **kwargs)
+
+    @property
+    def host_with_protocol(self) -> str | None:
+        """Returns the connection host with the protocol."""
+        if not self.host:
+            return None
+        if self.protocol:
+            return f"{self.protocol}://{self.host}"
+        return self.host
