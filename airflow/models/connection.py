@@ -89,6 +89,7 @@ class Connection(Base, LoggingMixin):
     conn_id = Column(String(ID_LEN), unique=True, nullable=False)
     conn_type = Column(String(500), nullable=False)
     description = Column(Text().with_variant(Text(5000), "mysql").with_variant(String(5000), "sqlite"))
+    protocol = Column(String(500))
     host = Column(String(500))
     schema = Column(String(500))
     login = Column(String(500))
@@ -110,6 +111,7 @@ class Connection(Base, LoggingMixin):
         port: int | None = None,
         extra: str | dict | None = None,
         uri: str | None = None,
+        protocol: str | None = None,
     ):
         super().__init__()
         self.conn_id = conn_id
@@ -126,7 +128,8 @@ class Connection(Base, LoggingMixin):
             self._parse_from_uri(uri)
         else:
             self.conn_type = conn_type
-            self.host = host
+            self.protocol = protocol
+            self.host = self._validate_host(host)
             self.login = login
             self.password = password
             self.schema = schema
@@ -137,6 +140,14 @@ class Connection(Base, LoggingMixin):
 
         if self.password:
             mask_secret(self.password)
+
+    @staticmethod
+    def _validate_host(host) -> str:
+        if "://" in host:
+            raise AirflowException(
+                f"Invalid hostname: {host}. You have to specify protocol scheme separately from hostname."
+            )
+        return host
 
     @staticmethod
     def _validate_extra(extra, conn_id) -> None:
@@ -187,16 +198,21 @@ class Connection(Base, LoggingMixin):
         return conn_type
 
     def _parse_from_uri(self, uri: str):
-        scheme_in_uri = uri.count("://") > 1
+        schemes_count_in_uri = uri.count("://")
+        if schemes_count_in_uri > 2:
+            raise AirflowException(f"Invalid connection string: {uri}.")
+        scheme_in_uri = schemes_count_in_uri == 2
         uri_parts = urlsplit(uri)
         conn_type = uri_parts.scheme
         self.conn_type = self._normalize_conn_type(conn_type)
-        if not scheme_in_uri:
-            self.host = _parse_netloc_to_hostname(uri_parts)
-        else:
-            rest_of_the_url = uri.replace(f"{conn_type}://", "")
-            uri_parts = urlsplit(rest_of_the_url)
-            self.host = f"{uri_parts.scheme}://" + _parse_netloc_to_hostname(uri_parts)
+        reset_of_the_url = uri.replace(f"{conn_type}://", ("//" if scheme_in_uri else ""))
+        if scheme_in_uri:
+            uri_splits = reset_of_the_url.split("://", 1)
+            if "@" in uri_splits[0] or ":" in uri_splits[0]:
+                raise AirflowException(f"Invalid connection string: {uri}.")
+        uri_parts = urlsplit(reset_of_the_url)
+        self.protocol = uri_parts.scheme
+        self.host = _parse_netloc_to_hostname(uri_parts)
         quoted_schema = uri_parts.path[1:]
         self.schema = unquote(quoted_schema) if quoted_schema else quoted_schema
         self.login = unquote(uri_parts.username) if uri_parts.username else uri_parts.username
@@ -221,6 +237,9 @@ class Connection(Base, LoggingMixin):
             uri = f"{self.conn_type.lower().replace('_', '-')}://"
         else:
             uri = "//"
+
+        if self.protocol:
+            uri += f"{self.protocol}://"
 
         authority_block = ""
         if self.login is not None:
