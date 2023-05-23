@@ -18,8 +18,8 @@
 
 """Add index to task_instance table
 
-Revision ID: 937cbd173ca1
-Revises: 98ae134e6fff
+Revision ID: 182f46e239db
+Revises: 937cbd173ca1
 Create Date: 2023-05-03 11:31:32.527362
 
 """
@@ -28,8 +28,8 @@ from __future__ import annotations
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "937cbd173ca1"
-down_revision = "98ae134e6fff"
+revision = "182f46e239db"
+down_revision = "937cbd173ca1"
 branch_labels = None
 depends_on = None
 airflow_version = "2.7.0"
