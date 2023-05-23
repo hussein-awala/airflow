@@ -24,14 +24,15 @@ from airflow.models import Connection
 
 class TestConnection:
     @pytest.mark.parametrize(
-        "uri, expected_conn_type, expected_host, expected_login, expected_password, expected_port,"
-        " expected_schema, expected_extra_dict",
+        "uri, expected_conn_type, expected_protocol, expected_host, expected_login, expected_password,"
+        " expected_port, expected_schema, expected_extra_dict",
         [
-            ("type://user:pass@host:100/schema", "type", "host", "user", "pass", 100, "schema", {}),
-            ("type://user:pass@host/schema", "type", "host", "user", "pass", None, "schema", {}),
+            ("type://user:pass@host:100/schema", "type", None, "host", "user", "pass", 100, "schema", {}),
+            ("type://user:pass@host/schema", "type", None, "host", "user", "pass", None, "schema", {}),
             (
                 "type://user:pass@host/schema?param1=val1&param2=val2",
                 "type",
+                None,
                 "host",
                 "user",
                 "pass",
@@ -39,10 +40,11 @@ class TestConnection:
                 "schema",
                 {"param1": "val1", "param2": "val2"},
             ),
-            ("type://host", "type", "host", None, None, None, "", {}),
+            ("type://host", "type", None, "host", None, None, None, "", {}),
             (
                 "spark://mysparkcluster.com:80?deploy-mode=cluster&spark_binary=command&namespace=kube+namespace",
                 "spark",
+                None,
                 "mysparkcluster.com",
                 None,
                 None,
@@ -53,7 +55,8 @@ class TestConnection:
             (
                 "spark://k8s://100.68.0.1:443?deploy-mode=cluster",
                 "spark",
-                "k8s://100.68.0.1",
+                "k8s",
+                "100.68.0.1",
                 None,
                 None,
                 443,
@@ -61,14 +64,27 @@ class TestConnection:
                 {"deploy-mode": "cluster"},
             ),
             (
-                "type://user:pass@scheme://host:port?param=value",
+                "type://protocol://user:pass@host:port?param=value",
                 "type",
-                "scheme://host",
+                "protocol",
+                "host",
                 "user",
                 "pass",
                 "port",
                 "",
                 {"param": "value"},
+            ),
+            (
+                "type://user:pass@protocol://host:port?param=value",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                "Invalid hostname: type://user:pass@protocol://host:port?param=value."
+                " You have to specify protocol scheme separately from hostname.",
             ),
         ],
     )
@@ -76,18 +92,25 @@ class TestConnection:
         self,
         uri,
         expected_conn_type,
+        expected_protocol,
         expected_host,
         expected_login,
         expected_password,
         expected_port,
         expected_schema,
         expected_extra_dict,
+        expected_exception_message,
     ):
-        conn = Connection(uri=uri)
-        assert conn.conn_type == expected_conn_type
-        assert conn.login == expected_login
-        assert conn.password == expected_password
-        assert conn.host == expected_host
-        assert conn.port == expected_port
-        assert conn.schema == expected_schema
-        assert conn.extra_dejson == expected_extra_dict
+        if expected_exception_message is not None:
+            with pytest.raises(ValueError, match=expected_exception_message):
+                Connection(uri=uri)
+        else:
+            conn = Connection(uri=uri)
+            assert conn.conn_type == expected_conn_type
+            assert conn.login == expected_login
+            assert conn.password == expected_password
+            assert conn.protocol == expected_protocol
+            assert conn.host == expected_host
+            assert conn.port == expected_port
+            assert conn.schema == expected_schema
+            assert conn.extra_dejson == expected_extra_dict
