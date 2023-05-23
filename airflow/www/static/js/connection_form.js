@@ -245,6 +245,7 @@ $(document).ready(() => {
         - conn_id
         - conn_type
         - description
+        - protocol
         - host
         - schema
         - login

@@ -4460,6 +4460,7 @@ class ConnectionModelView(AirflowModelView):
         "conn_id",
         "conn_type",
         "description",
+        "protocol",
         "host",
         "port",
         "is_encrypted",
@@ -4473,6 +4474,7 @@ class ConnectionModelView(AirflowModelView):
         "conn_id",
         "conn_type",
         "description",
+        "protocol",
         "host",
         "schema",
         "login",
@@ -4586,15 +4588,16 @@ class ConnectionModelView(AirflowModelView):
                 )
             else:
                 dup_conn = Connection(
-                    new_conn_id,
-                    selected_conn.conn_type,
-                    selected_conn.description,
-                    selected_conn.host,
-                    selected_conn.login,
-                    selected_conn.password,
-                    selected_conn.schema,
-                    selected_conn.port,
-                    selected_conn.extra,
+                    conn_id=new_conn_id,
+                    conn_type=selected_conn.conn_type,
+                    description=selected_conn.description,
+                    protocol=selected_conn.protocol,
+                    host=selected_conn.host,
+                    login=selected_conn.login,
+                    password=selected_conn.password,
+                    schema=selected_conn.schema,
+                    port=selected_conn.port,
+                    extra=selected_conn.extra,
                 )
 
                 try:

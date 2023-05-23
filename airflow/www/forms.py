@@ -220,6 +220,7 @@ def create_connection_form_class() -> type[DynamicForm]:
             ),
         )
         description = StringField(lazy_gettext("Description"), widget=BS3TextAreaFieldWidget())
+        protocol = StringField(lazy_gettext("Protocol"), widget=BS3TextFieldWidget())
         host = StringField(lazy_gettext("Host"), widget=BS3TextFieldWidget())
         schema = StringField(lazy_gettext("Schema"), widget=BS3TextFieldWidget())
         login = StringField(lazy_gettext("Login"), widget=BS3TextFieldWidget())

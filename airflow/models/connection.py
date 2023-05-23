@@ -142,8 +142,8 @@ class Connection(Base, LoggingMixin):
             mask_secret(self.password)
 
     @staticmethod
-    def _validate_host(host) -> str:
-        if "://" in host:
+    def _validate_host(host) -> str | None:
+        if host and "://" in host:
             raise AirflowException(
                 f"Invalid hostname: {host}. You have to specify protocol scheme separately from hostname."
             )
