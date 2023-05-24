@@ -17,18 +17,43 @@
 # under the License.
 from __future__ import annotations
 
+import re
+
 import pytest
 
+from airflow import AirflowException
 from airflow.models import Connection
 
 
 class TestConnection:
     @pytest.mark.parametrize(
         "uri, expected_conn_type, expected_protocol, expected_host, expected_login, expected_password,"
-        " expected_port, expected_schema, expected_extra_dict",
+        " expected_port, expected_schema, expected_extra_dict, expected_exception_message",
         [
-            ("type://user:pass@host:100/schema", "type", None, "host", "user", "pass", 100, "schema", {}),
-            ("type://user:pass@host/schema", "type", None, "host", "user", "pass", None, "schema", {}),
+            (
+                "type://user:pass@host:100/schema",
+                "type",
+                None,
+                "host",
+                "user",
+                "pass",
+                100,
+                "schema",
+                {},
+                None,
+            ),
+            (
+                "type://user:pass@host/schema",
+                "type",
+                None,
+                "host",
+                "user",
+                "pass",
+                None,
+                "schema",
+                {},
+                None,
+            ),
             (
                 "type://user:pass@host/schema?param1=val1&param2=val2",
                 "type",
@@ -39,8 +64,20 @@ class TestConnection:
                 None,
                 "schema",
                 {"param1": "val1", "param2": "val2"},
+                None,
             ),
-            ("type://host", "type", None, "host", None, None, None, "", {}),
+            (
+                "type://host",
+                "type",
+                None,
+                "host",
+                None,
+                None,
+                None,
+                "",
+                {},
+                None,
+            ),
             (
                 "spark://mysparkcluster.com:80?deploy-mode=cluster&spark_binary=command&namespace=kube+namespace",
                 "spark",
@@ -51,28 +88,31 @@ class TestConnection:
                 80,
                 "",
                 {"deploy-mode": "cluster", "spark_binary": "command", "namespace": "kube namespace"},
+                None,
             ),
             (
                 "spark://k8s://100.68.0.1:443?deploy-mode=cluster",
                 "spark",
                 "k8s",
-                "100.68.0.1",
+                "k8s://100.68.0.1",
                 None,
                 None,
                 443,
                 "",
                 {"deploy-mode": "cluster"},
+                None,
             ),
             (
-                "type://protocol://user:pass@host:port?param=value",
+                "type://protocol://user:pass@host:123?param=value",
                 "type",
                 "protocol",
-                "host",
+                "protocol://host",
                 "user",
                 "pass",
-                "port",
+                123,
                 "",
                 {"param": "value"},
+                None,
             ),
             (
                 "type://user:pass@protocol://host:port?param=value",
@@ -83,8 +123,8 @@ class TestConnection:
                 None,
                 None,
                 None,
-                "Invalid hostname: type://user:pass@protocol://host:port?param=value."
-                " You have to specify protocol scheme separately from hostname.",
+                None,
+                r"Invalid connection string: type://user:pass@protocol://host:port?param=value.",
             ),
         ],
     )
@@ -102,7 +142,7 @@ class TestConnection:
         expected_exception_message,
     ):
         if expected_exception_message is not None:
-            with pytest.raises(ValueError, match=expected_exception_message):
+            with pytest.raises(AirflowException, match=re.escape(expected_exception_message)):
                 Connection(uri=uri)
         else:
             conn = Connection(uri=uri)
@@ -114,3 +154,76 @@ class TestConnection:
             assert conn.port == expected_port
             assert conn.schema == expected_schema
             assert conn.extra_dejson == expected_extra_dict
+
+    @pytest.mark.parametrize(
+        "connection, expected_uri",
+        [
+            (
+                Connection(
+                    conn_type="type",
+                    login="user",
+                    password="pass",
+                    host="host",
+                    port=100,
+                    schema="schema",
+                    extra={"param1": "val1", "param2": "val2"},
+                ),
+                "type://user:pass@host:100/schema?param1=val1&param2=val2",
+            ),
+            (
+                Connection(
+                    conn_type="type",
+                    host="protocol://host",
+                    port=100,
+                    schema="schema",
+                    extra={"param1": "val1", "param2": "val2"},
+                ),
+                "type://protocol://host:100/schema?param1=val1&param2=val2",
+            ),
+            (
+                Connection(
+                    conn_type="type",
+                    login="user",
+                    password="pass",
+                    host="protocol://host",
+                    port=100,
+                    schema="schema",
+                    extra={"param1": "val1", "param2": "val2"},
+                ),
+                "type://protocol://user:pass@host:100/schema?param1=val1&param2=val2",
+            ),
+            (
+                Connection(
+                    conn_type="type",
+                    login="user",
+                    password="pass",
+                    protocol="protocol",
+                    host="host",
+                    port=100,
+                    schema="schema",
+                    extra={"param1": "val1", "param2": "val2"},
+                ),
+                "type://protocol://user:pass@host:100/schema?param1=val1&param2=val2",
+            ),
+        ],
+    )
+    def test_get_uri(self, connection, expected_uri):
+        assert connection.get_uri() == expected_uri
+
+    def test_connection_protocol_validation(self):
+        with pytest.raises(
+            AirflowException,
+            match=re.escape(
+                "You cannot specify the protocol (protocol) and use a host with a protocol at the same time."
+            ),
+        ):
+            Connection(
+                conn_type="type",
+                login="user",
+                password="pass",
+                protocol="protocol",
+                host="protocol://host",
+                port=100,
+                schema="schema",
+                extra={"param1": "val1", "param2": "val2"},
+            ),
