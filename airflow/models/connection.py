@@ -90,7 +90,7 @@ class Connection(Base, LoggingMixin):
     conn_type = Column(String(500), nullable=False)
     description = Column(Text().with_variant(Text(5000), "mysql").with_variant(String(5000), "sqlite"))
     protocol = Column(String(500))
-    host = Column(String(500))
+    _host = Column(String(500))
     schema = Column(String(500))
     login = Column(String(500))
     _password = Column("password", String(5000))
@@ -129,7 +129,7 @@ class Connection(Base, LoggingMixin):
         else:
             self.conn_type = conn_type
             self.protocol = protocol
-            self.host = self._validate_host(host)
+            self._host = self._validate_host(host, protocol)
             self.login = login
             self.password = password
             self.schema = schema
@@ -142,10 +142,18 @@ class Connection(Base, LoggingMixin):
             mask_secret(self.password)
 
     @staticmethod
-    def _validate_host(host) -> str | None:
+    def _validate_host(host, protocol) -> str | None:
         if host and "://" in host:
-            raise AirflowException(
-                f"Invalid hostname: {host}. You have to specify protocol scheme separately from hostname."
+            if protocol:
+                raise AirflowException(
+                    f"You cannot specify the protocol ({protocol}) "
+                    f"and use a host with a protocol at the same time."
+                )
+            warnings.warn(
+                "This hostname format is deprecated."
+                " You have to specify protocol scheme separately from hostname instead.",
+                DeprecationWarning,
+                stacklevel=2,
             )
         return host
 
@@ -212,7 +220,7 @@ class Connection(Base, LoggingMixin):
                 raise AirflowException(f"Invalid connection string: {uri}.")
         uri_parts = urlsplit(reset_of_the_url)
         self.protocol = uri_parts.scheme
-        self.host = _parse_netloc_to_hostname(uri_parts)
+        self._host = _parse_netloc_to_hostname(uri_parts)
         quoted_schema = uri_parts.path[1:]
         self.schema = unquote(quoted_schema) if quoted_schema else quoted_schema
         self.login = unquote(uri_parts.username) if uri_parts.username else uri_parts.username
@@ -238,8 +246,18 @@ class Connection(Base, LoggingMixin):
         else:
             uri = "//"
 
-        if self.protocol:
-            uri += f"{self.protocol}://"
+        if "://" in self._host:
+            protocol, host = self._host.split("://", 1)
+        else:
+            protocol, host = None, self._host
+        if self.protocol and protocol:
+            raise AirflowException(
+                f"You cannot specify the protocol ({self.protocol}) "
+                f"and use a host with a protocol at the same time."
+            )
+        protocol = self.protocol or protocol
+        if protocol:
+            uri += f"{protocol}://"
 
         authority_block = ""
         if self.login is not None:
@@ -254,8 +272,8 @@ class Connection(Base, LoggingMixin):
             uri += authority_block
 
         host_block = ""
-        if self.host:
-            host_block += quote(self.host, safe="")
+        if host:
+            host_block += quote(host, safe="")
 
         if self.port:
             if host_block == "" and authority_block == "":
@@ -476,10 +494,10 @@ class Connection(Base, LoggingMixin):
         return Connection(conn_id=conn_id, **kwargs)
 
     @property
-    def host_with_protocol(self) -> str | None:
+    def host(self) -> str | None:
         """Returns the connection host with the protocol."""
-        if not self.host:
+        if not self._host:
             return None
         if self.protocol:
-            return f"{self.protocol}://{self.host}"
-        return self.host
+            return f"{self.protocol}://{self._host}"
+        return self._host
