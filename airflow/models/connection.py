@@ -213,13 +213,13 @@ class Connection(Base, LoggingMixin):
         uri_parts = urlsplit(uri)
         conn_type = uri_parts.scheme
         self.conn_type = self._normalize_conn_type(conn_type)
-        reset_of_the_url = uri.replace(f"{conn_type}://", ("//" if scheme_in_uri else ""))
+        reset_of_the_url = uri.replace(f"{conn_type}://", ("" if scheme_in_uri else "//"))
         if scheme_in_uri:
             uri_splits = reset_of_the_url.split("://", 1)
             if "@" in uri_splits[0] or ":" in uri_splits[0]:
                 raise AirflowException(f"Invalid connection string: {uri}.")
         uri_parts = urlsplit(reset_of_the_url)
-        self.protocol = uri_parts.scheme
+        self.protocol = uri_parts.scheme if scheme_in_uri else None
         self._host = _parse_netloc_to_hostname(uri_parts)
         quoted_schema = uri_parts.path[1:]
         self.schema = unquote(quoted_schema) if quoted_schema else quoted_schema
