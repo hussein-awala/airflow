@@ -25,10 +25,12 @@ from airflow.operators.python import PythonOperator
 
 
 def add_one(x: int):
+    """A callable used in the mapped tasks to add one to the input."""
     return x + 1
 
 
 def sum_it(values):
+    """A callable used in the final task to aggregate (reduce) the mapped tasks results"""
     total = sum(values)
     print(f"Total was {total}")
 
