@@ -618,6 +618,13 @@ class TestStringifiedDAGs:
             )
             serialized_partial_kwargs = {**default_partial_kwargs, **serialized_task.partial_kwargs}
             original_partial_kwargs = {**default_partial_kwargs, **task.partial_kwargs}
+
+            # exclude callable fields from comparison because they are not deserialized
+            callable_fiels = [k for k, v in original_partial_kwargs.items() if callable(v)]
+            for callable_field in callable_fiels:
+                serialized_partial_kwargs.pop(callable_field)
+                original_partial_kwargs.pop(callable_field)
+
             assert serialized_partial_kwargs == original_partial_kwargs
 
         # Check that for Deserialized task, task.subdag is None for all other Operators
