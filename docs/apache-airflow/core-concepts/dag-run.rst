@@ -40,6 +40,10 @@ There are two possible terminal states for the DAG Run:
     Be careful if some of your tasks have defined some specific :ref:`trigger rule <concepts:trigger-rules>`.
     These can lead to some unexpected behavior, e.g. if you have a leaf task with trigger rule `"all_done"`, it will be executed regardless of the states of the rest of the tasks and if it will succeed, then the whole DAG Run will also be marked as ``success``, even if something failed in the middle.
 
+*Added in Airflow 2.7*
+
+DAGs that have a currently running DAG run can be shown on the UI dashboard in the "Running" tab. Similarly, DAGs whose latest DAG run is marked as failed can be found on the "Failed" tab.
+
 Cron Presets
 ''''''''''''
 
@@ -56,6 +60,8 @@ or one of the following cron "presets". For more elaborate scheduling requiremen
 | ``None``       | Don't schedule, use for exclusively "externally triggered" DAGs    |                 |
 +----------------+--------------------------------------------------------------------+-----------------+
 | ``@once``      | Schedule once and only once                                        |                 |
++----------------+--------------------------------------------------------------------+-----------------+
+| ``@continuous``| Run as soon as the previous run finishes                           |                 |
 +----------------+--------------------------------------------------------------------+-----------------+
 | ``@hourly``    | Run once an hour at the end of the hour                            | ``0 * * * *``   |
 +----------------+--------------------------------------------------------------------+-----------------+
@@ -181,7 +187,7 @@ Run the below command
         --end-date END_DATE \
         dag_id
 
-The `backfill command <cli-and-env-variables-ref.html#backfill>`_ will re-run all the instances of the dag_id for all the intervals within the start date and end date.
+The `backfill command <../cli-and-env-variables-ref.html#backfill>`_ will re-run all the instances of the dag_id for all the intervals within the start date and end date.
 
 Re-run Tasks
 ------------
@@ -212,7 +218,7 @@ You can also clear the task through CLI using the command:
         --end-date END_DATE
 
 For the specified ``dag_id`` and time interval, the command clears all instances of the tasks matching the regex.
-For more options, you can check the help of the `clear command <cli-ref.html#clear>`_ :
+For more options, you can check the help of the `clear command <../cli-and-env-variables-ref.html#clear>`_ :
 
 .. code-block:: bash
 

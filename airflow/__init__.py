@@ -26,6 +26,8 @@ isort:skip_file
 """
 from __future__ import annotations
 
+__version__ = "2.7.0.dev0"
+
 # flake8: noqa: F401
 
 import os
@@ -52,8 +54,6 @@ from airflow import settings
 
 __all__ = ["__version__", "login", "DAG", "PY36", "PY37", "PY38", "PY39", "PY310", "XComArg"]
 
-__version__ = "2.6.0.dev0"
-
 # Make `airflow` an namespace package, supporting installing
 # airflow.providers.* in different locations (i.e. one in site, and one in user
 # lib.)
@@ -72,6 +72,7 @@ PY37 = sys.version_info >= (3, 7)
 PY38 = sys.version_info >= (3, 8)
 PY39 = sys.version_info >= (3, 9)
 PY310 = sys.version_info >= (3, 10)
+PY311 = sys.version_info >= (3, 11)
 
 # Things to lazy import in form {local_name: ('target_module', 'target_name')}
 __lazy_imports: dict[str, tuple[str, str]] = {

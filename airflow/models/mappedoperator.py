@@ -66,6 +66,7 @@ from airflow.utils.helpers import is_container, prevent_duplicates
 from airflow.utils.operator_resources import Resources
 from airflow.utils.trigger_rule import TriggerRule
 from airflow.utils.types import NOTSET
+from airflow.utils.xcom import XCOM_RETURN_KEY
 
 if TYPE_CHECKING:
     import jinja2  # Slow import.
@@ -111,7 +112,7 @@ def validate_mapping_kwargs(op: type[BaseOperator], func: ValidationSource, valu
 
 
 def ensure_xcomarg_return_value(arg: Any) -> None:
-    from airflow.models.xcom_arg import XCOM_RETURN_KEY, XComArg
+    from airflow.models.xcom_arg import XComArg
 
     if isinstance(arg, XComArg):
         for operator, key in arg.iter_references():
@@ -288,6 +289,10 @@ class MappedOperator(AbstractOperator):
     """
 
     subdag: None = None  # Since we don't support SubDagOperator, this is always None.
+    supports_lineage: bool = False
+    is_setup: bool = False
+    is_teardown: bool = False
+    on_failure_fail_dagrun: bool = False
 
     HIDE_ATTRS_FROM_UI: ClassVar[frozenset[str]] = AbstractOperator.HIDE_ATTRS_FROM_UI | frozenset(
         (
@@ -333,6 +338,10 @@ class MappedOperator(AbstractOperator):
             "subdag",
             "task_group",
             "upstream_task_ids",
+            "supports_lineage",
+            "is_setup",
+            "is_teardown",
+            "on_failure_fail_dagrun",
         }
 
     @staticmethod
@@ -451,6 +460,10 @@ class MappedOperator(AbstractOperator):
         return self.partial_kwargs.get("max_active_tis_per_dag")
 
     @property
+    def max_active_tis_per_dagrun(self) -> int | None:
+        return self.partial_kwargs.get("max_active_tis_per_dagrun")
+
+    @property
     def resources(self) -> Resources | None:
         return self.partial_kwargs.get("resources")
 
@@ -536,7 +549,7 @@ class MappedOperator(AbstractOperator):
 
     @property
     def output(self) -> XComArg:
-        """Returns reference to XCom pushed by current operator"""
+        """Returns reference to XCom pushed by current operator."""
         from airflow.models.xcom_arg import XComArg
 
         return XComArg(operator=self)
