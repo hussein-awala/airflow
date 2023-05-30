@@ -39,7 +39,7 @@ with DAG(
     dag_id="example_dynamic_task_mapping_with_no_taskflow_operators",
     start_date=datetime(2022, 3, 4),
     catchup=False,
-) as dag:
+):
 
     add_one_task = PythonOperator.partial(task_id="add_one", python_callable=add_one).expand(
         op_kwargs=[
