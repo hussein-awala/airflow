@@ -38,7 +38,7 @@ from airflow.compat.functools import cache
 from airflow.configuration import conf
 from airflow.datasets import Dataset
 from airflow.exceptions import AirflowException, RemovedInAirflow3Warning, SerializationError
-from airflow.jobs.base_job import BaseJob
+from airflow.jobs.job import Job
 from airflow.models.baseoperator import BaseOperator, BaseOperatorLink
 from airflow.models.connection import Connection
 from airflow.models.dag import DAG, create_timetable
@@ -54,11 +54,11 @@ from airflow.providers_manager import ProvidersManager
 from airflow.serialization.enums import DagAttributeTypes as DAT, Encoding
 from airflow.serialization.helpers import serialize_template_field
 from airflow.serialization.json_schema import Validator, load_dag_schema
-from airflow.serialization.pydantic.base_job import BaseJobPydantic
 from airflow.serialization.pydantic.dag_run import DagRunPydantic
 from airflow.serialization.pydantic.dataset import DatasetPydantic
+from airflow.serialization.pydantic.job import JobPydantic
 from airflow.serialization.pydantic.taskinstance import TaskInstancePydantic
-from airflow.settings import DAGS_FOLDER, json
+from airflow.settings import _ENABLE_AIP_44, DAGS_FOLDER, json
 from airflow.timetables.base import Timetable
 from airflow.utils.code_utils import get_python_source
 from airflow.utils.docs import get_docs_url
@@ -287,7 +287,7 @@ class BaseSerialization:
     _datetime_types = (datetime.datetime,)
 
     # Object types that are always excluded in serialization.
-    _excluded_types = (logging.Logger, Connection, type)
+    _excluded_types = (logging.Logger, Connection, type, property)
 
     _json_schema: Validator | None = None
 
@@ -404,6 +404,11 @@ class BaseSerialization:
 
         :meta private:
         """
+        if use_pydantic_models and not _ENABLE_AIP_44:
+            raise RuntimeError(
+                "Setting use_pydantic_models = True requires AIP-44 (in progress) feature flag to be true. "
+                "This parameter will be removed eventually when new serialization is used by AIP-44"
+            )
         if cls._is_primitive(var):
             # enum.IntEnum is an int instance, it causes json dumps error so we use its value.
             if isinstance(var, enum.Enum):
@@ -473,19 +478,26 @@ class BaseSerialization:
                 cls.serialize(var.__dict__, strict=strict, use_pydantic_models=use_pydantic_models),
                 type_=DAT.SIMPLE_TASK_INSTANCE,
             )
-        elif use_pydantic_models and isinstance(var, BaseJob):
-            return cls._encode(BaseJobPydantic.from_orm(var).dict(), type_=DAT.BASE_JOB)
-        elif use_pydantic_models and isinstance(var, TaskInstance):
-            return cls._encode(TaskInstancePydantic.from_orm(var).dict(), type_=DAT.TASK_INSTANCE)
-        elif use_pydantic_models and isinstance(var, DagRun):
-            return cls._encode(DagRunPydantic.from_orm(var).dict(), type_=DAT.DAG_RUN)
-        elif use_pydantic_models and isinstance(var, Dataset):
-            return cls._encode(DatasetPydantic.from_orm(var).dict(), type_=DAT.DATA_SET)
+        elif use_pydantic_models and _ENABLE_AIP_44:
+            if isinstance(var, Job):
+                return cls._encode(JobPydantic.from_orm(var).dict(), type_=DAT.BASE_JOB)
+            elif isinstance(var, TaskInstance):
+                return cls._encode(TaskInstancePydantic.from_orm(var).dict(), type_=DAT.TASK_INSTANCE)
+            elif isinstance(var, DagRun):
+                return cls._encode(DagRunPydantic.from_orm(var).dict(), type_=DAT.DAG_RUN)
+            elif isinstance(var, Dataset):
+                return cls._encode(DatasetPydantic.from_orm(var).dict(), type_=DAT.DATA_SET)
+            else:
+                return cls.default_serialization(strict, var)
         else:
-            log.debug("Cast type %s to str in serialization.", type(var))
-            if strict:
-                raise SerializationError("Encountered unexpected type")
-            return str(var)
+            return cls.default_serialization(strict, var)
+
+    @classmethod
+    def default_serialization(cls, strict, var) -> str:
+        log.debug("Cast type %s to str in serialization.", type(var))
+        if strict:
+            raise SerializationError("Encountered unexpected type")
+        return str(var)
 
     @classmethod
     def deserialize(cls, encoded_var: Any, use_pydantic_models=False) -> Any:
@@ -494,6 +506,11 @@ class BaseSerialization:
         :meta private:
         """
         # JSON primitives (except for dict) are not encoded.
+        if use_pydantic_models and not _ENABLE_AIP_44:
+            raise RuntimeError(
+                "Setting use_pydantic_models = True requires AIP-44 (in progress) feature flag to be true. "
+                "This parameter will be removed eventually when new serialization is used by AIP-44"
+            )
         if cls._is_primitive(encoded_var):
             return encoded_var
         elif isinstance(encoded_var, list):
@@ -535,14 +552,15 @@ class BaseSerialization:
             return Dataset(**var)
         elif type_ == DAT.SIMPLE_TASK_INSTANCE:
             return SimpleTaskInstance(**cls.deserialize(var))
-        elif use_pydantic_models and type_ == DAT.BASE_JOB:
-            return BaseJobPydantic.parse_obj(var)
-        elif use_pydantic_models and type_ == DAT.TASK_INSTANCE:
-            return TaskInstancePydantic.parse_obj(var)
-        elif use_pydantic_models and type_ == DAT.DAG_RUN:
-            return DagRunPydantic.parse_obj(var)
-        elif use_pydantic_models and type_ == DAT.DATA_SET:
-            return DatasetPydantic.parse_obj(var)
+        elif use_pydantic_models and _ENABLE_AIP_44:
+            if type_ == DAT.BASE_JOB:
+                return JobPydantic.parse_obj(var)
+            elif type_ == DAT.TASK_INSTANCE:
+                return TaskInstancePydantic.parse_obj(var)
+            elif type_ == DAT.DAG_RUN:
+                return DagRunPydantic.parse_obj(var)
+            elif type_ == DAT.DATA_SET:
+                return DatasetPydantic.parse_obj(var)
         else:
             raise TypeError(f"Invalid type {type_!s} in deserialization.")
 
@@ -804,7 +822,9 @@ class SerializedBaseOperator(BaseOperator, BaseSerialization):
 
         if op.operator_extra_links:
             serialize_op["_operator_extra_links"] = cls._serialize_operator_extra_links(
-                op.operator_extra_links
+                op.operator_extra_links.__get__(op)
+                if isinstance(op.operator_extra_links, property)
+                else op.operator_extra_links
             )
 
         if include_deps:
@@ -942,7 +962,8 @@ class SerializedBaseOperator(BaseOperator, BaseSerialization):
                 v = cls.deserialize(v)
             elif k in ("outlets", "inlets"):
                 v = cls.deserialize(v)
-
+            elif k == "on_failure_fail_dagrun":
+                k = "_on_failure_fail_dagrun"
             # else use v as it is
 
             setattr(op, k, v)
@@ -1069,6 +1090,7 @@ class SerializedBaseOperator(BaseOperator, BaseSerialization):
     def _deserialize_operator_extra_links(cls, encoded_op_links: list) -> dict[str, BaseOperatorLink]:
         """
         Deserialize Operator Links if the Classes are registered in Airflow Plugins.
+
         Error is raised if the OperatorLink is not found in Plugins too.
 
         :param encoded_op_links: Serialized Operator Link
@@ -1220,7 +1242,7 @@ class SerializedDAG(DAG, BaseSerialization):
                 for dep in SerializedBaseOperator.detect_dependencies(task)
             }
             dag_deps.update(DependencyDetector.detect_dag_dependencies(dag))
-            serialized_dag["dag_dependencies"] = [x.__dict__ for x in dag_deps]
+            serialized_dag["dag_dependencies"] = [x.__dict__ for x in sorted(dag_deps)]
             serialized_dag["_task_group"] = TaskGroupSerialization.serialize_task_group(dag.task_group)
 
             # Edge info in the JSON exactly matches our internal structure
@@ -1426,9 +1448,11 @@ class TaskGroupSerialization(BaseSerialization):
         return group
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class DagDependency:
-    """Dataclass for representing dependencies between DAGs.
+    """
+    Dataclass for representing dependencies between DAGs.
+
     These are calculated during serialization and attached to serialized DAGs.
     """
 

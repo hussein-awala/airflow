@@ -17,6 +17,7 @@
 # under the License.
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from textwrap import wrap
@@ -27,8 +28,10 @@ sys.path.insert(0, str(Path(__file__).parent.resolve()))  # make sure common_pre
 sys.path.insert(0, str(AIRFLOW_SOURCES_DIR))  # make sure setup is imported from Airflow
 # flake8: noqa: F401
 
-from common_precommit_utils import insert_documentation  # isort: skip # noqa E402
-from setup import EXTRAS_DEPENDENCIES  # isort:skip # noqa
+os.environ["_SKIP_PYTHON_VERSION_CHECK"] = "true"
+
+from common_precommit_utils import insert_documentation  # isort: skip
+from setup import EXTRAS_DEPENDENCIES  # isort:skip
 
 sys.path.append(str(AIRFLOW_SOURCES_DIR))
 

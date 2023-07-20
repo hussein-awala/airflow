@@ -26,18 +26,22 @@ import warnings
 from collections import namedtuple
 from datetime import date, datetime, timedelta
 from subprocess import CalledProcessError
+from typing import Generator
 from unittest import mock
+from unittest.mock import MagicMock
 
 import pytest
 from slugify import slugify
 
-from airflow.exceptions import AirflowException, RemovedInAirflow3Warning
+from airflow.decorators import task_group
+from airflow.exceptions import AirflowException, DeserializingResultError, RemovedInAirflow3Warning
 from airflow.models import DAG, DagRun, TaskInstance as TI
 from airflow.models.baseoperator import BaseOperator
-from airflow.models.taskinstance import clear_task_instances, set_current_context
+from airflow.models.taskinstance import TaskInstance, clear_task_instances, set_current_context
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import (
     BranchPythonOperator,
+    ExternalPythonOperator,
     PythonOperator,
     PythonVirtualenvOperator,
     ShortCircuitOperator,
@@ -47,7 +51,7 @@ from airflow.utils import timezone
 from airflow.utils.context import AirflowContextDeprecationWarning, Context
 from airflow.utils.python_virtualenv import prepare_virtualenv
 from airflow.utils.session import create_session
-from airflow.utils.state import DagRunState, State
+from airflow.utils.state import DagRunState, State, TaskInstanceState
 from airflow.utils.trigger_rule import TriggerRule
 from airflow.utils.types import NOTSET, DagRunType
 from tests.test_utils import AIRFLOW_MAIN_FOLDER
@@ -131,10 +135,12 @@ class BasePythonTest:
         task.run(start_date=self.default_date, end_date=self.default_date)
         return task
 
-    def run_as_task(self, fn, **kwargs):
+    def run_as_task(self, fn, return_ti=False, **kwargs):
         """Create TaskInstance and run it."""
         ti = self.create_ti(fn, **kwargs)
         ti.run()
+        if return_ti:
+            return ti
         return ti.task
 
     def render_templates(self, fn, **kwargs):
@@ -276,6 +282,20 @@ class TestPythonOperator(BasePythonTest):
         else:
             assert "Done. Returned value was: test_return_value" not in caplog.messages
             assert "Done. Returned value not shown" in caplog.messages
+
+    def test_python_operator_templates_exts(self):
+        def func():
+            return "test_return_value"
+
+        python_operator = PythonOperator(
+            task_id="python_operator",
+            python_callable=func,
+            dag=self.dag,
+            show_return_value_in_logs=False,
+            templates_exts=["test_ext"],
+        )
+
+        assert python_operator.template_ext == ["test_ext"]
 
 
 class TestBranchOperator(BasePythonTest):
@@ -599,22 +619,202 @@ class TestShortCircuitOperator(BasePythonTest):
 
         tis = dr.get_task_instances()
         assert tis[0].xcom_pull(task_ids=short_op_push_xcom.task_id, key="return_value") == "signature"
-        assert tis[0].xcom_pull(task_ids=short_op_no_push_xcom.task_id, key="return_value") is None
+        assert tis[0].xcom_pull(task_ids=short_op_no_push_xcom.task_id, key="return_value") is False
+
+    def test_xcom_push_skipped_tasks(self):
+        with self.dag:
+            short_op_push_xcom = ShortCircuitOperator(
+                task_id="push_xcom_from_shortcircuit", python_callable=lambda: False
+            )
+            empty_task = EmptyOperator(task_id="empty_task")
+            short_op_push_xcom >> empty_task
+        dr = self.create_dag_run()
+        short_op_push_xcom.run(start_date=self.default_date, end_date=self.default_date)
+        tis = dr.get_task_instances()
+        assert tis[0].xcom_pull(task_ids=short_op_push_xcom.task_id, key="skipmixin_key") == {
+            "skipped": ["empty_task"]
+        }
+
+    def test_mapped_xcom_push_skipped_tasks(self, session):
+        with self.dag:
+
+            @task_group
+            def group(x):
+                short_op_push_xcom = ShortCircuitOperator(
+                    task_id="push_xcom_from_shortcircuit",
+                    python_callable=lambda arg: arg % 2 == 0,
+                    op_kwargs={"arg": x},
+                )
+                empty_task = EmptyOperator(task_id="empty_task")
+                short_op_push_xcom >> empty_task
+
+            group.expand(x=[0, 1])
+        dr = self.create_dag_run()
+        decision = dr.task_instance_scheduling_decisions(session=session)
+        for ti in decision.schedulable_tis:
+            ti.run()
+        # dr.run(start_date=self.default_date, end_date=self.default_date)
+        tis = dr.get_task_instances()
+
+        assert (
+            tis[0].xcom_pull(task_ids="group.push_xcom_from_shortcircuit", key="return_value", map_indexes=0)
+            is True
+        )
+        assert (
+            tis[0].xcom_pull(task_ids="group.push_xcom_from_shortcircuit", key="skipmixin_key", map_indexes=0)
+            is None
+        )
+        assert tis[0].xcom_pull(
+            task_ids="group.push_xcom_from_shortcircuit", key="skipmixin_key", map_indexes=1
+        ) == {"skipped": ["group.empty_task"]}
 
 
 virtualenv_string_args: list[str] = []
 
 
-class TestPythonVirtualenvOperator(BasePythonTest):
+class BaseTestPythonVirtualenvOperator(BasePythonTest):
+    def test_template_fields(self):
+        assert set(PythonOperator.template_fields).issubset(PythonVirtualenvOperator.template_fields)
+
+    def test_fail(self):
+        def f():
+            raise Exception
+
+        with pytest.raises(CalledProcessError):
+            self.run_as_task(f)
+
+    def test_fail_with_message(self):
+        def f():
+            raise Exception("Custom error message")
+
+        with pytest.raises(AirflowException) as e:
+            self.run_as_task(f)
+            assert "Custom error message" in str(e)
+
+    def test_string_args(self):
+        def f():
+            global virtualenv_string_args
+            print(virtualenv_string_args)
+            if virtualenv_string_args[0] != virtualenv_string_args[2]:
+                raise Exception
+
+        self.run_as_task(f, string_args=[1, 2, 1])
+
+    def test_with_args(self):
+        def f(a, b, c=False, d=False):
+            if a == 0 and b == 1 and c and not d:
+                return True
+            else:
+                raise Exception
+
+        self.run_as_task(f, op_args=[0, 1], op_kwargs={"c": True})
+
+    def test_return_none(self):
+        def f():
+            return None
+
+        task = self.run_as_task(f)
+        assert task.execute_callable() is None
+
+    def test_return_false(self):
+        def f():
+            return False
+
+        task = self.run_as_task(f)
+        assert task.execute_callable() is False
+
+    def test_lambda(self):
+        with pytest.raises(AirflowException):
+            PythonVirtualenvOperator(python_callable=lambda x: 4, task_id=self.task_id)
+
+    def test_nonimported_as_arg(self):
+        def f(_):
+            return None
+
+        self.run_as_task(f, op_args=[datetime.utcnow()])
+
+    def test_context(self):
+        def f(templates_dict):
+            return templates_dict["ds"]
+
+        task = self.run_as_task(f, templates_dict={"ds": "{{ ds }}"})
+        assert task.templates_dict == {"ds": self.ds_templated}
+
+    def test_deepcopy(self):
+        """Test that PythonVirtualenvOperator are deep-copyable."""
+
+        def f():
+            return 1
+
+        task = PythonVirtualenvOperator(python_callable=f, task_id="task")
+        copy.deepcopy(task)
+
+    def test_virtualenv_serializable_context_fields(self, create_task_instance):
+        """Ensure all template context fields are listed in the operator.
+
+        This exists mainly so when a field is added to the context, we remember to
+        also add it to PythonVirtualenvOperator.
+        """
+        # These are intentionally NOT serialized into the virtual environment:
+        # * Variables pointing to the task instance itself.
+        # * Variables that are accessor instances.
+        intentionally_excluded_context_keys = [
+            "task_instance",
+            "ti",
+            "var",  # Accessor for Variable; var->json and var->value.
+            "conn",  # Accessor for Connection.
+        ]
+
+        ti = create_task_instance(dag_id=self.dag_id, task_id=self.task_id, schedule=None)
+        context = ti.get_template_context()
+
+        declared_keys = {
+            *PythonVirtualenvOperator.BASE_SERIALIZABLE_CONTEXT_KEYS,
+            *PythonVirtualenvOperator.PENDULUM_SERIALIZABLE_CONTEXT_KEYS,
+            *PythonVirtualenvOperator.AIRFLOW_SERIALIZABLE_CONTEXT_KEYS,
+            *intentionally_excluded_context_keys,
+        }
+        assert set(context) == declared_keys
+
+    @pytest.mark.parametrize(
+        "extra_kwargs, actual_exit_code, expected_state",
+        [
+            (None, 99, TaskInstanceState.FAILED),
+            ({"skip_on_exit_code": 100}, 100, TaskInstanceState.SKIPPED),
+            ({"skip_on_exit_code": [100]}, 100, TaskInstanceState.SKIPPED),
+            ({"skip_on_exit_code": (100, 101)}, 100, TaskInstanceState.SKIPPED),
+            ({"skip_on_exit_code": 100}, 101, TaskInstanceState.FAILED),
+            ({"skip_on_exit_code": [100, 102]}, 101, TaskInstanceState.FAILED),
+            ({"skip_on_exit_code": None}, 0, TaskInstanceState.SUCCESS),
+        ],
+    )
+    def test_on_skip_exit_code(self, extra_kwargs, actual_exit_code, expected_state):
+        def f(exit_code):
+            if exit_code != 0:
+                raise SystemExit(exit_code)
+
+        if expected_state == TaskInstanceState.FAILED:
+            with pytest.raises(CalledProcessError):
+                self.run_as_task(
+                    f, op_kwargs={"exit_code": actual_exit_code}, **(extra_kwargs if extra_kwargs else {})
+                )
+        else:
+            ti = self.run_as_task(
+                f,
+                return_ti=True,
+                op_kwargs={"exit_code": actual_exit_code},
+                **(extra_kwargs if extra_kwargs else {}),
+            )
+            assert ti.state == expected_state
+
+
+class TestPythonVirtualenvOperator(BaseTestPythonVirtualenvOperator):
     opcls = PythonVirtualenvOperator
 
     @staticmethod
     def default_kwargs(*, python_version=sys.version_info[0], **kwargs):
         kwargs["python_version"] = python_version
         return kwargs
-
-    def test_template_fields(self):
-        assert set(PythonOperator.template_fields).issubset(PythonVirtualenvOperator.template_fields)
 
     def test_add_dill(self):
         def f():
@@ -709,13 +909,6 @@ class TestPythonVirtualenvOperator(BasePythonTest):
             system_site_packages=False,
         )
 
-    def test_fail(self):
-        def f():
-            raise Exception
-
-        with pytest.raises(CalledProcessError):
-            self.run_as_task(f)
-
     def test_python_3(self):
         def f():
             import sys
@@ -734,55 +927,6 @@ class TestPythonVirtualenvOperator(BasePythonTest):
             return a
 
         self.run_as_task(f, system_site_packages=False, use_dill=False, op_args=[4])
-
-    def test_string_args(self):
-        def f():
-            global virtualenv_string_args
-            print(virtualenv_string_args)
-            if virtualenv_string_args[0] != virtualenv_string_args[2]:
-                raise Exception
-
-        self.run_as_task(f, string_args=[1, 2, 1])
-
-    def test_with_args(self):
-        def f(a, b, c=False, d=False):
-            if a == 0 and b == 1 and c and not d:
-                return True
-            else:
-                raise Exception
-
-        self.run_as_task(f, op_args=[0, 1], op_kwargs={"c": True})
-
-    def test_return_none(self):
-        def f():
-            return None
-
-        task = self.run_as_task(f)
-        assert task.execute_callable() is None
-
-    def test_return_false(self):
-        def f():
-            return False
-
-        task = self.run_as_task(f)
-        assert task.execute_callable() is False
-
-    def test_lambda(self):
-        with pytest.raises(AirflowException):
-            PythonVirtualenvOperator(python_callable=lambda x: 4, task_id=self.task_id)
-
-    def test_nonimported_as_arg(self):
-        def f(_):
-            return None
-
-        self.run_as_task(f, op_args=[datetime.utcnow()])
-
-    def test_context(self):
-        def f(templates_dict):
-            return templates_dict["ds"]
-
-        task = self.run_as_task(f, templates_dict={"ds": "{{ ds }}"})
-        assert task.templates_dict == {"ds": self.ds_templated}
 
     # This tests might take longer than default 60 seconds as it is serializing a lot of
     # context using dill (which is slow apparently).
@@ -896,41 +1040,29 @@ class TestPythonVirtualenvOperator(BasePythonTest):
 
         self.run_as_task(f, use_dill=True, system_site_packages=False, requirements=None)
 
-    def test_deepcopy(self):
-        """Test that PythonVirtualenvOperator are deep-copyable."""
 
+class TestExternalPythonOperator(BaseTestPythonVirtualenvOperator):
+    opcls = ExternalPythonOperator
+
+    @staticmethod
+    def default_kwargs(*, python_version=sys.version_info[0], **kwargs):
+        kwargs["python"] = sys.executable
+        return kwargs
+
+    @mock.patch("pickle.loads")
+    def test_except_value_error(self, loads_mock):
         def f():
             return 1
 
-        task = PythonVirtualenvOperator(python_callable=f, task_id="task")
-        copy.deepcopy(task)
+        task = PythonVirtualenvOperator(
+            python_callable=f,
+            task_id="task",
+            dag=self.dag,
+        )
 
-    def test_virtualenv_serializable_context_fields(self, create_task_instance):
-        """Ensure all template context fields are listed in the operator.
-
-        This exists mainly so when a field is added to the context, we remember to
-        also add it to PythonVirtualenvOperator.
-        """
-        # These are intentionally NOT serialized into the virtual environment:
-        # * Variables pointing to the task instance itself.
-        # * Variables that are accessor instances.
-        intentionally_excluded_context_keys = [
-            "task_instance",
-            "ti",
-            "var",  # Accessor for Variable; var->json and var->value.
-            "conn",  # Accessor for Connection.
-        ]
-
-        ti = create_task_instance(dag_id=self.dag_id, task_id=self.task_id, schedule=None)
-        context = ti.get_template_context()
-
-        declared_keys = {
-            *PythonVirtualenvOperator.BASE_SERIALIZABLE_CONTEXT_KEYS,
-            *PythonVirtualenvOperator.PENDULUM_SERIALIZABLE_CONTEXT_KEYS,
-            *PythonVirtualenvOperator.AIRFLOW_SERIALIZABLE_CONTEXT_KEYS,
-            *intentionally_excluded_context_keys,
-        }
-        assert set(context) == declared_keys
+        loads_mock.side_effect = DeserializingResultError
+        with pytest.raises(DeserializingResultError):
+            task._read_result(path=mock.Mock())
 
 
 class TestCurrentContext:
@@ -1015,3 +1147,141 @@ class TestCurrentContextRuntime:
         with DAG(dag_id="edge_case_context_dag", default_args=DEFAULT_ARGS, schedule="@once"):
             op = PythonOperator(python_callable=get_all_the_context, task_id="get_all_the_context")
             op.run(ignore_first_depends_on_past=True, ignore_ti_state=True)
+
+
+class TestShortCircuitWithTeardown:
+    @pytest.mark.parametrize(
+        "ignore_downstream_trigger_rules, with_teardown, should_skip, expected",
+        [
+            (False, True, True, ["op2"]),
+            (False, True, False, []),
+            (False, False, True, ["op2"]),
+            (False, False, False, []),
+            (True, True, True, ["op2", "op3"]),
+            (True, True, False, []),
+            (True, False, True, ["op2", "op3", "op4"]),
+            (True, False, False, []),
+        ],
+    )
+    def test_short_circuit_with_teardowns(
+        self, dag_maker, ignore_downstream_trigger_rules, should_skip, with_teardown, expected
+    ):
+        with dag_maker() as dag:
+            op1 = ShortCircuitOperator(
+                task_id="op1",
+                python_callable=lambda: not should_skip,
+                ignore_downstream_trigger_rules=ignore_downstream_trigger_rules,
+            )
+            op2 = PythonOperator(task_id="op2", python_callable=print)
+            op3 = PythonOperator(task_id="op3", python_callable=print)
+            op4 = PythonOperator(task_id="op4", python_callable=print)
+            if with_teardown:
+                op4.as_teardown()
+            op1 >> op2 >> op3 >> op4
+            op1.skip = MagicMock()
+            dagrun = dag_maker.create_dagrun()
+            tis = dagrun.get_task_instances()
+            ti: TaskInstance = [x for x in tis if x.task_id == "op1"][0]
+            ti._run_raw_task()
+            expected_tasks = {dag.task_dict[x] for x in expected}
+        if should_skip:
+            # we can't use assert_called_with because it's a set and therefore not ordered
+            actual_skipped = set(op1.skip.call_args.kwargs["tasks"])
+            assert actual_skipped == expected_tasks
+        else:
+            op1.skip.assert_not_called()
+
+    @pytest.mark.parametrize("config", ["sequence", "parallel"])
+    def test_short_circuit_with_teardowns_complicated(self, dag_maker, config):
+        with dag_maker():
+            s1 = PythonOperator(task_id="s1", python_callable=print).as_setup()
+            s2 = PythonOperator(task_id="s2", python_callable=print).as_setup()
+            op1 = ShortCircuitOperator(
+                task_id="op1",
+                python_callable=lambda: False,
+            )
+            op2 = PythonOperator(task_id="op2", python_callable=print)
+            t1 = PythonOperator(task_id="t1", python_callable=print).as_teardown(setups=s1)
+            t2 = PythonOperator(task_id="t2", python_callable=print).as_teardown(setups=s2)
+            if config == "sequence":
+                s1 >> op1 >> s2 >> op2 >> [t1, t2]
+            elif config == "parallel":
+                s1 >> op1 >> s2 >> op2 >> t2 >> t1
+            else:
+                raise ValueError("unexpected")
+            op1.skip = MagicMock()
+            dagrun = dag_maker.create_dagrun()
+            tis = dagrun.get_task_instances()
+            ti: TaskInstance = [x for x in tis if x.task_id == "op1"][0]
+            ti._run_raw_task()
+            # we can't use assert_called_with because it's a set and therefore not ordered
+            actual_skipped = set(op1.skip.call_args.kwargs["tasks"])
+            assert actual_skipped == {s2, op2}
+
+    def test_short_circuit_with_teardowns_complicated_2(self, dag_maker):
+        with dag_maker():
+            s1 = PythonOperator(task_id="s1", python_callable=print).as_setup()
+            s2 = PythonOperator(task_id="s2", python_callable=print).as_setup()
+            op1 = ShortCircuitOperator(
+                task_id="op1",
+                python_callable=lambda: False,
+            )
+            op2 = PythonOperator(task_id="op2", python_callable=print)
+            op3 = PythonOperator(task_id="op3", python_callable=print)
+            t1 = PythonOperator(task_id="t1", python_callable=print).as_teardown(setups=s1)
+            t2 = PythonOperator(task_id="t2", python_callable=print).as_teardown(setups=s2)
+            s1 >> op1 >> op3 >> t1
+            s2 >> op2 >> t2
+
+            # this is the weird, maybe nonsensical part
+            # in this case we don't want to skip t2 since it should run
+            op1 >> t2
+            op1.skip = MagicMock()
+            dagrun = dag_maker.create_dagrun()
+            tis = dagrun.get_task_instances()
+            ti: TaskInstance = [x for x in tis if x.task_id == "op1"][0]
+            ti._run_raw_task()
+            # we can't use assert_called_with because it's a set and therefore not ordered
+            actual_kwargs = op1.skip.call_args.kwargs
+            actual_skipped = set(actual_kwargs["tasks"])
+            assert actual_kwargs["execution_date"] == dagrun.logical_date
+            assert actual_skipped == {op3}
+
+    @pytest.mark.parametrize("level", [logging.DEBUG, logging.INFO])
+    def test_short_circuit_with_teardowns_debug_level(self, dag_maker, level, clear_db):
+        """
+        When logging is debug we convert to a list to log the tasks skipped
+        before passing them to the skip method.
+        """
+        with dag_maker():
+            s1 = PythonOperator(task_id="s1", python_callable=print).as_setup()
+            s2 = PythonOperator(task_id="s2", python_callable=print).as_setup()
+            op1 = ShortCircuitOperator(
+                task_id="op1",
+                python_callable=lambda: False,
+            )
+            op1.log.setLevel(level)
+            op2 = PythonOperator(task_id="op2", python_callable=print)
+            op3 = PythonOperator(task_id="op3", python_callable=print)
+            t1 = PythonOperator(task_id="t1", python_callable=print).as_teardown(setups=s1)
+            t2 = PythonOperator(task_id="t2", python_callable=print).as_teardown(setups=s2)
+            s1 >> op1 >> op3 >> t1
+            s2 >> op2 >> t2
+
+            # this is the weird, maybe nonsensical part
+            # in this case we don't want to skip t2 since it should run
+            op1 >> t2
+            op1.skip = MagicMock()
+            dagrun = dag_maker.create_dagrun()
+            tis = dagrun.get_task_instances()
+            ti: TaskInstance = [x for x in tis if x.task_id == "op1"][0]
+            ti._run_raw_task()
+            # we can't use assert_called_with because it's a set and therefore not ordered
+            actual_kwargs = op1.skip.call_args.kwargs
+            actual_skipped = actual_kwargs["tasks"]
+            if level <= logging.DEBUG:
+                assert isinstance(actual_skipped, list)
+            else:
+                assert isinstance(actual_skipped, Generator)
+            assert set(actual_skipped) == {op3}
+            assert actual_kwargs["execution_date"] == dagrun.logical_date

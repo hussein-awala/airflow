@@ -28,6 +28,8 @@ from operator import attrgetter
 
 import rich_click as click
 
+from airflow.jobs.job import run_job
+
 MAX_DAG_RUNS_ALLOWED = 1
 
 
@@ -61,7 +63,7 @@ class ShortCircuitExecutorMixin:
         Change the state of scheduler by waiting till the tasks is complete
         and then shut down the scheduler after the task is complete
         """
-        from airflow.utils.state import State
+        from airflow.utils.state import TaskInstanceState
 
         super().change_state(key, state, info=info)
 
@@ -81,7 +83,7 @@ class ShortCircuitExecutorMixin:
             run = list(airflow.models.DagRun.find(dag_id=dag_id, execution_date=execution_date))[0]
             self.dags_to_watch[dag_id].runs[execution_date] = run
 
-        if run and all(t.state == State.SUCCESS for t in run.get_task_instances()):
+        if run and all(t.state == TaskInstanceState.SUCCESS for t in run.get_task_instances()):
             self.dags_to_watch[dag_id].runs.pop(execution_date)
             self.dags_to_watch[dag_id].waiting_for -= 1
 
@@ -90,7 +92,7 @@ class ShortCircuitExecutorMixin:
 
             if not self.dags_to_watch:
                 self.log.warning("STOPPING SCHEDULER -- all runs complete")
-                self.scheduler_job.processor_agent._done = True
+                self.job_runner.processor_agent._done = True
                 return
         self.log.warning(
             "WAITING ON %d RUNS", sum(map(attrgetter("waiting_for"), self.dags_to_watch.values()))
@@ -117,7 +119,7 @@ def get_executor_under_test(dotted_path):
         Placeholder class that implements the inheritance hierarchy
         """
 
-        scheduler_job = None
+        job_runner = None
 
     return ShortCircuitExecutor
 
@@ -154,7 +156,7 @@ def create_dag_runs(dag, num_runs, session):
     Create  `num_runs` of dag runs for sub-sequent schedules
     """
     from airflow.utils import timezone
-    from airflow.utils.state import State
+    from airflow.utils.state import DagRunState
 
     try:
         from airflow.utils.types import DagRunType
@@ -173,7 +175,7 @@ def create_dag_runs(dag, num_runs, session):
             run_id=f"{id_prefix}{logical_date.isoformat()}",
             execution_date=logical_date,
             start_date=timezone.utcnow(),
-            state=State.RUNNING,
+            state=DagRunState.RUNNING,
             external_trigger=False,
             session=session,
         )
@@ -240,7 +242,8 @@ def main(num_runs, repeat, pre_create_dag_runs, executor_class, dag_ids):
     if pre_create_dag_runs:
         os.environ["AIRFLOW__SCHEDULER__USE_JOB_SCHEDULE"] = "False"
 
-    from airflow.jobs.scheduler_job import SchedulerJob
+    from airflow.jobs.job import Job
+    from airflow.jobs.scheduler_job_runner import SchedulerJobRunner
     from airflow.models.dagbag import DagBag
     from airflow.utils import db
 
@@ -276,8 +279,9 @@ def main(num_runs, repeat, pre_create_dag_runs, executor_class, dag_ids):
     ShortCircuitExecutor = get_executor_under_test(executor_class)
 
     executor = ShortCircuitExecutor(dag_ids_to_watch=dag_ids, num_runs=num_runs)
-    scheduler_job = SchedulerJob(dag_ids=dag_ids, do_pickle=False, executor=executor)
-    executor.scheduler_job = scheduler_job
+    scheduler_job = Job(executor=executor)
+    job_runner = SchedulerJobRunner(job=scheduler_job, dag_ids=dag_ids, do_pickle=False)
+    executor.job_runner = job_runner
 
     total_tasks = sum(len(dag.tasks) for dag in dags)
 
@@ -290,7 +294,7 @@ def main(num_runs, repeat, pre_create_dag_runs, executor_class, dag_ids):
 
     # Need a lambda to refer to the _latest_ value for scheduler_job, not just
     # the initial one
-    code_to_test = lambda: scheduler_job.run()
+    code_to_test = lambda: run_job(job=job_runner.job, execute_callable=job_runner._execute)
 
     for count in range(repeat):
         gc.disable()
@@ -307,7 +311,8 @@ def main(num_runs, repeat, pre_create_dag_runs, executor_class, dag_ids):
                     reset_dag(dag, session)
 
             executor.reset(dag_ids)
-            scheduler_job = SchedulerJob(dag_ids=dag_ids, do_pickle=False, executor=executor)
+            scheduler_job = Job(executor=executor)
+            job_runner = SchedulerJobRunner(job=scheduler_job, dag_ids=dag_ids, do_pickle=False)
             executor.scheduler_job = scheduler_job
 
     print()

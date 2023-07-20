@@ -33,7 +33,7 @@ class DagRunPydantic(BaseModelPydantic):
     start_date: Optional[datetime]
     end_date: Optional[datetime]
     state: str
-    run_id: Optional[str]
+    run_id: str
     creating_job_id: Optional[int]
     external_trigger: bool
     run_type: str
@@ -45,6 +45,6 @@ class DagRunPydantic(BaseModelPydantic):
     consumed_dataset_events: List[DatasetEventPydantic]
 
     class Config:
-        """Make sure it deals automatically with ORM classes of SQL Alchemy"""
+        """Make sure it deals automatically with SQLAlchemy ORM classes."""
 
         orm_mode = True
