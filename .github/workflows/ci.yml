@@ -552,7 +552,7 @@ jobs:
   static-checks-basic-checks-only:
     timeout-minutes: 30
     name: "Static checks: basic checks only"
-    runs-on: "${{needs.build-info.outputs.runs-on}}"
+    runs-on: [self-hosted, medium]
     needs: [build-info]
     env:
       RUNS_ON: "${{needs.build-info.outputs.runs-on}}"
