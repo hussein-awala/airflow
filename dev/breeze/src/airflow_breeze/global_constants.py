@@ -29,7 +29,7 @@ from airflow_breeze.utils.host_info_utils import Architecture
 from airflow_breeze.utils.path_utils import AIRFLOW_SOURCES_ROOT, PROVIDER_DEPENDENCIES_JSON_FILE_PATH
 
 RUNS_ON_PUBLIC_RUNNER = "ubuntu-22.04"
-RUNS_ON_SELF_HOSTED_RUNNER = "self-hosted"
+RUNS_ON_SELF_HOSTED_RUNNER = "[self-hosted, small]"
 SELF_HOSTED_RUNNERS_CPU_COUNT = 8
 
 ANSWER = ""
