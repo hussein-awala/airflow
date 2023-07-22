@@ -576,6 +576,7 @@ jobs:
           python-version: "${{needs.build-info.outputs.default-python-version}}"
           cache: 'pip'
           cache-dependency-path: ./dev/breeze/setup*
+          architecture: x64
       - name: "Install Breeze"
         uses: ./.github/actions/breeze
         id: breeze
