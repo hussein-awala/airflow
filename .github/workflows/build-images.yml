@@ -51,7 +51,7 @@ jobs:
   build-info:
     timeout-minutes: 10
     name: "Build Info"
-    runs-on: 'ubuntu-22.04'
+    runs-on: [self-hosted, small]
     env:
       TARGET_BRANCH: ${{ github.event.pull_request.base.ref }}
     outputs:
@@ -66,7 +66,7 @@ jobs:
       cache-directive: ${{ steps.selective-checks.outputs.cache-directive }}
       default-branch: ${{ steps.selective-checks.outputs.default-branch }}
       default-constraints-branch: ${{ steps.selective-checks.outputs.default-constraints-branch }}
-      runs-on: ${{ steps.selective-checks.outputs.runs-on }}
+      runs-on: [self-hosted, small]
       target-commit-sha: "${{steps.discover-pr-merge-commit.outputs.target-commit-sha ||
           github.event.pull_request.head.sha ||
           github.sha
@@ -164,7 +164,7 @@ jobs:
     timeout-minutes: 80
     name: >
       Build CI images ${{needs.build-info.outputs.all-python-versions-list-as-string}}
-    runs-on: ${{ needs.build-info.outputs.runs-on }}
+    runs-on: [self-hosted, small]
     needs: [build-info]
     if: |
       needs.build-info.outputs.image-build == 'true' &&
@@ -203,7 +203,7 @@ jobs:
     name: >
       Build PROD images
       ${{needs.build-info.outputs.all-python-versions-list-as-string}}
-    runs-on: ${{ needs.build-info.outputs.runs-on }}
+    runs-on: [self-hosted, small]
     needs: [build-info, build-ci-images]
     if: |
       needs.build-info.outputs.image-build == 'true' &&
@@ -240,7 +240,7 @@ jobs:
   build-ci-images-arm:
     timeout-minutes: 50
     name: "Build ARM CI images ${{needs.build-info.outputs.all-python-versions-list-as-string}}"
-    runs-on: ${{ needs.build-info.outputs.runs-on }}
+    runs-on: [self-hosted, small]
     needs: [build-info, build-prod-images]
     if: |
       needs.build-info.outputs.image-build == 'true' &&
