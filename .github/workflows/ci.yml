@@ -382,11 +382,6 @@ jobs:
       - uses: actions/checkout@v3
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "${{needs.build-info.outputs.default-python-version}}"
-          cache: 'pip'
-          cache-dependency-path: ./dev/breeze/setup*
       - run: python -m pip install --editable ./dev/breeze/
       - run: >
           breeze setup version ||
@@ -455,12 +450,6 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
-      - name: "Setup python"
-        uses: actions/setup-python@v4
-        with:
-          python-version: "${{needs.build-info.outputs.default-python-version}}"
-          cache: 'pip'
-          cache-dependency-path: ./dev/requirements.txt
       - name: "Test examples of PROD image building"
         run: >
           cd ./docker_tests &&
@@ -570,13 +559,6 @@ jobs:
         uses: actions/checkout@v3
         with:
           persist-credentials: false
-      - name: "Setup python"
-        uses: actions/setup-python@v4
-        with:
-          python-version: "${{needs.build-info.outputs.default-python-version}}"
-          cache: 'pip'
-          cache-dependency-path: ./dev/breeze/setup*
-          architecture: x64
       - name: "Install Breeze"
         uses: ./.github/actions/breeze
         id: breeze

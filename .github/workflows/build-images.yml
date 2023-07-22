@@ -107,10 +107,6 @@ jobs:
           ref: ${{ env.TARGET_COMMIT_SHA }}
           persist-credentials: false
           fetch-depth: 2
-      - name: "Setup python"
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.8
       - name: "Retrieve defaults from branch_defaults.py"
         # We cannot "execute" the branch_defaults.py python code here because that would be
         # a security problem (we cannot run any code that comes from the sources coming from the PR.
