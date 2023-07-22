@@ -387,6 +387,8 @@ jobs:
           python-version: "${{needs.build-info.outputs.default-python-version}}"
           cache: 'pip'
           cache-dependency-path: ./dev/breeze/setup*
+        env:
+          AGENT_TOOLSDIRECTORY: /opt/hostedtoolache
       - run: python -m pip install --editable ./dev/breeze/
       - run: >
           breeze setup version ||
@@ -461,6 +463,8 @@ jobs:
           python-version: "${{needs.build-info.outputs.default-python-version}}"
           cache: 'pip'
           cache-dependency-path: ./dev/requirements.txt
+        env:
+          AGENT_TOOLSDIRECTORY: /opt/hostedtoolache
       - name: "Test examples of PROD image building"
         run: >
           cd ./docker_tests &&
@@ -576,6 +580,8 @@ jobs:
           python-version: "${{needs.build-info.outputs.default-python-version}}"
           cache: 'pip'
           cache-dependency-path: ./dev/breeze/setup*
+        env:
+          AGENT_TOOLSDIRECTORY: /opt/hostedtoolache
       - name: "Install Breeze"
         uses: ./.github/actions/breeze
         id: breeze

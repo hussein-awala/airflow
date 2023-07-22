@@ -31,6 +31,8 @@ runs:
         python-version: 3.8
         cache: 'pip'
         cache-dependency-path: ./dev/breeze/setup*
+      env:
+        AGENT_TOOLSDIRECTORY: /opt/hostedtoolache
     - name: Cache breeze
       uses: actions/cache@v3
       with:
