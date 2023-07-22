@@ -160,7 +160,7 @@ jobs:
     timeout-minutes: 80
     name: >
       Build CI images ${{needs.build-info.outputs.all-python-versions-list-as-string}}
-    runs-on: [self-hosted, small]
+    runs-on: [self-hosted, medium]
     needs: [build-info]
     if: |
       needs.build-info.outputs.image-build == 'true' &&

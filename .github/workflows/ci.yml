@@ -413,6 +413,7 @@ jobs:
         with:
           path: 'airflow/www/node_modules'
           key: ${{ runner.os }}-www-node-modules-${{ hashFiles('airflow/www/**/yarn.lock') }}
+      - run: npm install -g yarn
       - run: yarn --cwd airflow/www/ install --frozen-lockfile --non-interactive
       - run: yarn --cwd airflow/www/ run test
         env:
@@ -547,7 +548,7 @@ jobs:
   static-checks-basic-checks-only:
     timeout-minutes: 30
     name: "Static checks: basic checks only"
-    runs-on: [self-hosted, medium]
+    runs-on: [self-hosted, small]
     needs: [build-info]
     env:
       RUNS_ON: "${{needs.build-info.outputs.runs-on}}"
