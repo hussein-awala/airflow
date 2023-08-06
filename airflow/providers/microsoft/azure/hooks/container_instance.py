@@ -46,7 +46,7 @@ class AzureContainerInstanceHook(AzureBaseHook):
     hook_name = "Azure Container Instance"
 
     def __init__(self, azure_conn_id: str = default_conn_name) -> None:
-        super().__init__(sdk_client=ContainerInstanceManagementClient, conn_id=azure_conn_id)
+        super().__init__(sdk_client=ContainerInstanceManagementClient, azure_conn_id=azure_conn_id)
         self.connection = self.get_conn()
 
     def create_or_update(self, resource_group: str, name: str, container_group: ContainerGroup) -> None:

@@ -84,9 +84,10 @@ class AzureBaseHook(BaseHook):
             },
         }
 
-    def __init__(self, sdk_client: Any, conn_id: str = "azure_default"):
+    def __init__(self, sdk_client: Any, azure_conn_id: str = "azure_default", **kwargs):
         self.sdk_client = sdk_client
-        self.conn_id = conn_id
+        # we need to keep the conn_id for backward compatibility
+        self.conn_id = kwargs.get("conn_id") or azure_conn_id
         super().__init__()
 
     def get_conn(self) -> Any:
