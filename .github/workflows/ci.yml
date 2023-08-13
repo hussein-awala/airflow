@@ -117,13 +117,13 @@ jobs:
       runs-on: ${{ steps.selective-checks.outputs.runs-on }}
       runs-on-small: >-
         ${{ steps.selective-checks.outputs.runs-on == 'self-hosted'
-            && fromJson('["self-hosted", "small"]') || fromJson('["ubuntu-22.04"]') }}
+            && '["self-hosted", "small"]' || '["ubuntu-22.04"]' }}
       runs-on-medium: >-
         ${{ steps.selective-checks.outputs.runs-on == 'self-hosted'
-            && fromJson('["self-hosted", "medium"]') || fromJson('["ubuntu-22.04"]') }}
+            && '["self-hosted", "medium"]' || '["ubuntu-22.04"]' }}
       runs-on-large: >-
         ${{ steps.selective-checks.outputs.runs-on == 'self-hosted'
-            && fromJson('["self-hosted", "large"]') || fromJson('["ubuntu-22.04"]') }}
+            && '["self-hosted", "large"]' || '["ubuntu-22.04"]' }}
       has-migrations: ${{ steps.selective-checks.outputs.has-migrations }}
       source-head-repo: ${{ steps.source-run-info.outputs.source-head-repo }}
       pull-request-labels: ${{ steps.source-run-info.outputs.pr-labels }}
@@ -1349,9 +1349,7 @@ jobs:
       DEBUG_RESOURCES: "${{needs.build-info.outputs.debug-resources}}"
       JOB_ID: "quarantined-${{needs.build-info.outputs.default-python-version}}"
       COVERAGE: "${{needs.build-info.outputs.run-coverage}}"
-    if: >
-      needs.build-info.outputs.run-tests == 'true'
-      && needs.build-info.outputs.runs-on == 'self-hosted'
+    if: needs.build-info.outputs.run-tests == 'true' && needs.build-info.outputs.runs-on == 'self-hosted'
     steps:
       - name: Cleanup repo
         shell: bash
