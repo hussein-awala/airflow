@@ -39,7 +39,7 @@ jobs:
   build-info:
     timeout-minutes: 10
     name: "Build Info"
-    runs-on: ${{ needs.build-info.outputs.runs-on }}
+    runs-on: ${{ github.repository == 'hussein-awala/airflow' && 'self-hosted' || 'ubuntu-22.04' }}
     outputs:
       pythonVersions: ${{ steps.selective-checks.outputs.python-versions }}
       allPythonVersions: ${{ steps.selective-checks.outputs.all-python-versions }}
@@ -67,7 +67,7 @@ jobs:
   release-images:
     timeout-minutes: 120
     name: "Release images: ${{ github.event.inputs.airflowVersion }}, ${{ matrix.python-version }}"
-    runs-on: ${{ needs.build-info.outputs.runs-on }}
+    runs-on: ${{ github.repository == 'hussein-awala/airflow' && 'self-hosted' || 'ubuntu-22.04' }}
     needs: [build-info]
     strategy:
       fail-fast: false

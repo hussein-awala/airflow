@@ -64,7 +64,7 @@ jobs:
     # option but to specify a hard-coded list here. This is "safe", the
     # runner checks if the user is an owner or collaborator of the repo
     # before running the workflow.
-    runs-on: ${{ needs.build-info.outputs.runs-on }}
+    runs-on: "ubuntu-22.04"
     env:
       GITHUB_CONTEXT: ${{ toJson(github) }}
     outputs:
@@ -467,7 +467,7 @@ jobs:
   wait-for-ci-images:
     timeout-minutes: 120
     name: "Wait for CI images"
-    runs-on: ${{ needs.build-info.outputs.runs-on }}
+    runs-on: "ubuntu-22.04"
     needs: [build-info, build-ci-images]
     if: needs.build-info.outputs.image-build == 'true'
     env:
