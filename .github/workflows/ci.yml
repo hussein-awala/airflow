@@ -64,7 +64,7 @@ jobs:
     # option but to specify a hard-coded list here. This is "safe", the
     # runner checks if the user is an owner or collaborator of the repo
     # before running the workflow.
-    runs-on: "ubuntu-22.04"
+    runs-on: ["self-hosted", "small"]  # TODO: switch to "ubuntu-22.04"
     env:
       GITHUB_CONTEXT: ${{ toJson(github) }}
     outputs:
