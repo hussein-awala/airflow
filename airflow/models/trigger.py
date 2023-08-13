@@ -92,7 +92,7 @@ class Trigger(Base):
     @internal_api_call
     @provide_session
     def bulk_fetch(cls, ids: Iterable[int], session: Session = NEW_SESSION) -> dict[int, Trigger]:
-        """Fetches all the Triggers by ID and returns a dict mapping ID -> Trigger instance."""
+        """Fetch all the Triggers by ID and return a dict mapping ID -> Trigger instance."""
         query = session.scalars(
             select(cls)
             .where(cls.id.in_(ids))
@@ -108,7 +108,7 @@ class Trigger(Base):
     @internal_api_call
     @provide_session
     def clean_unused(cls, session: Session = NEW_SESSION) -> None:
-        """Deletes all triggers that have no tasks dependent on them.
+        """Delete all triggers that have no tasks dependent on them.
 
         Triggers have a one-to-many relationship to task instances, so we need
         to clean those up first. Afterwards we can drop the triggers not
@@ -141,7 +141,7 @@ class Trigger(Base):
     @internal_api_call
     @provide_session
     def submit_event(cls, trigger_id, event, session: Session = NEW_SESSION) -> None:
-        """Takes an event from an instance of itself, and triggers all dependent tasks to resume."""
+        """Take an event from an instance of itself, and trigger all dependent tasks to resume."""
         for task_instance in session.scalars(
             select(TaskInstance).where(
                 TaskInstance.trigger_id == trigger_id, TaskInstance.state == TaskInstanceState.DEFERRED
@@ -193,19 +193,21 @@ class Trigger(Base):
     @internal_api_call
     @provide_session
     def ids_for_triggerer(cls, triggerer_id, session: Session = NEW_SESSION) -> list[int]:
-        """Retrieves a list of triggerer_ids."""
+        """Retrieve a list of triggerer_ids."""
         return session.scalars(select(cls.id).where(cls.triggerer_id == triggerer_id)).all()
 
     @classmethod
     @internal_api_call
     @provide_session
-    def assign_unassigned(cls, triggerer_id, capacity, heartrate, session: Session = NEW_SESSION) -> None:
+    def assign_unassigned(
+        cls, triggerer_id, capacity, health_check_threshold, session: Session = NEW_SESSION
+    ) -> None:
         """
         Assign unassigned triggers based on a number of conditions.
 
-        Takes a triggerer_id, the capacity for that triggerer and the Triggerer job heartrate,
-        and assigns unassigned triggers until that capacity is reached, or there are no more
-        unassigned triggers.
+        Takes a triggerer_id, the capacity for that triggerer and the Triggerer job heartrate
+        health check threshold, and assigns unassigned triggers until that capacity is reached,
+        or there are no more unassigned triggers.
         """
         from airflow.jobs.job import Job  # To avoid circular import
 
@@ -214,9 +216,7 @@ class Trigger(Base):
 
         if capacity <= 0:
             return
-        # we multiply heartrate by a grace_multiplier to give the triggerer
-        # a chance to heartbeat before we consider it dead
-        health_check_threshold = heartrate * 2.1
+
         alive_triggerer_ids = session.scalars(
             select(Job.id).where(
                 Job.end_date.is_(None),
