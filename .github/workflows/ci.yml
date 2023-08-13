@@ -304,7 +304,7 @@ jobs:
     name: >-
       ${{needs.build-info.outputs.build-job-description}} CI images
       ${{needs.build-info.outputs.all-python-versions-list-as-string}}
-    runs-on: ${{ fromJson(needs.build-info.outputs.runs-on-small) }}
+    runs-on: ${{ fromJson(needs.build-info.outputs.runs-on-large) }}
     needs: [build-info]
     env:
       DEFAULT_BRANCH: ${{ needs.build-info.outputs.default-branch }}
