@@ -297,7 +297,7 @@ class WorkflowInfo(NamedTuple):
         for output in self.get_all_ga_outputs():
             print(output, file=sys.stderr)
 
-    def get_runs_on(self) -> list[str]:
+    def get_runs_on(self) -> str:
         for label in self.pull_request_labels:
             if "use public runners" in label:
                 get_console().print("[info]Force running on public runners")

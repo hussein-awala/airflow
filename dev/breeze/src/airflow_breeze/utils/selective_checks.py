@@ -785,7 +785,7 @@ class SelectiveChecks:
         return " ".join(sorted(affected_providers))
 
     @cached_property
-    def runs_on(self) -> list[str]:
+    def runs_on(self) -> str:
         if self._github_repository in [APACHE_AIRFLOW_GITHUB_REPOSITORY, "hussein-awala/airflow"]:
             if self._github_event in [GithubEvents.SCHEDULE, GithubEvents.PUSH]:
                 return RUNS_ON_SELF_HOSTED_RUNNER
