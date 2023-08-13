@@ -27,7 +27,7 @@ permissions:
   issues: write
 jobs:
   stale:
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     steps:
       - uses: actions/stale@v8
         with:

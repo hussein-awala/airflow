@@ -39,7 +39,7 @@ jobs:
   build-info:
     timeout-minutes: 10
     name: "Build Info"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     outputs:
       pythonVersions: ${{ steps.selective-checks.outputs.python-versions }}
       allPythonVersions: ${{ steps.selective-checks.outputs.all-python-versions }}
@@ -67,7 +67,7 @@ jobs:
   release-images:
     timeout-minutes: 120
     name: "Release images: ${{ github.event.inputs.airflowVersion }}, ${{ matrix.python-version }}"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info]
     strategy:
       fail-fast: false

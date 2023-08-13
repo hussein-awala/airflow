@@ -64,7 +64,7 @@ jobs:
     # option but to specify a hard-coded list here. This is "safe", the
     # runner checks if the user is an owner or collaborator of the repo
     # before running the workflow.
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     env:
       GITHUB_CONTEXT: ${{ toJson(github) }}
     outputs:
@@ -114,14 +114,8 @@ jobs:
       skip-pre-commits: ${{ steps.selective-checks.outputs.skip-pre-commits }}
       helm-test-packages: ${{ steps.selective-checks.outputs.helm-test-packages }}
       debug-resources: ${{ steps.selective-checks.outputs.debug-resources }}
-<<<<<<< HEAD
-      runs-on: [self-hosted, small]
-      has-migrations: ${{ steps.selective-checks.outputs.has-migrations }}
-||||||| constructed merge base
-      runs-on: [self-hosted, small]
-=======
       runs-on: ${{ steps.selective-checks.outputs.runs-on }}
->>>>>>> fix output values
+      has-migrations: ${{ steps.selective-checks.outputs.has-migrations }}
       source-head-repo: ${{ steps.source-run-info.outputs.source-head-repo }}
       pull-request-labels: ${{ steps.source-run-info.outputs.pr-labels }}
       in-workflow-build: ${{ steps.source-run-info.outputs.in-workflow-build }}
@@ -198,7 +192,7 @@ jobs:
   push-early-buildx-cache-to-github-registry:
     timeout-minutes: 50
     name: "Push Early Image Cache"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs:
       - build-info
     strategy:
@@ -270,7 +264,7 @@ jobs:
   check-that-image-builds-quickly:
     timeout-minutes: 5
     name: "Check that image builds quickly"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs:
       - build-info
       - push-early-buildx-cache-to-github-registry
@@ -301,7 +295,7 @@ jobs:
     name: >-
       ${{needs.build-info.outputs.build-job-description}} CI images
       ${{needs.build-info.outputs.all-python-versions-list-as-string}}
-    runs-on: [self-hosted, large]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info]
     env:
       DEFAULT_BRANCH: ${{ needs.build-info.outputs.default-branch }}
@@ -336,7 +330,7 @@ jobs:
     name: >
       ${{needs.build-info.outputs.build-job-description}} PROD images
       ${{needs.build-info.outputs.all-python-versions-list-as-string}}
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, build-ci-images]
     env:
       DEFAULT_BRANCH: ${{ needs.build-info.outputs.default-branch }}
@@ -374,7 +368,7 @@ jobs:
   run-breeze-tests:
     timeout-minutes: 10
     name: Breeze unit tests
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info]
     steps:
       - name: Cleanup repo
@@ -394,7 +388,7 @@ jobs:
   tests-www:
     timeout-minutes: 10
     name: React WWW tests
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info]
     if: needs.build-info.outputs.run-www-tests == 'true'
     steps:
@@ -423,7 +417,7 @@ jobs:
   test-openapi-client-generation:
     timeout-minutes: 10
     name: "Test OpenAPI client generation"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info]
     if: needs.build-info.outputs.needs-api-codegen == 'true'
     steps:
@@ -440,7 +434,7 @@ jobs:
   test-examples-of-prod-image-building:
     timeout-minutes: 60
     name: "Test examples of production image building"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info]
     if: needs.build-info.outputs.image-build == 'true'
     steps:
@@ -473,7 +467,7 @@ jobs:
   wait-for-ci-images:
     timeout-minutes: 120
     name: "Wait for CI images"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, build-ci-images]
     if: needs.build-info.outputs.image-build == 'true'
     env:
@@ -503,7 +497,7 @@ jobs:
   static-checks:
     timeout-minutes: 30
     name: "Static checks"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     env:
       RUNS_ON: "${{needs.build-info.outputs.runs-on}}"
@@ -548,7 +542,7 @@ jobs:
   static-checks-basic-checks-only:
     timeout-minutes: 30
     name: "Static checks: basic checks only"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info]
     env:
       RUNS_ON: "${{needs.build-info.outputs.runs-on}}"
@@ -596,7 +590,7 @@ jobs:
   docs:
     timeout-minutes: 90
     name: "Build docs"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     if: needs.build-info.outputs.docs-build == 'true'
     env:
@@ -655,7 +649,7 @@ jobs:
   prepare-test-provider-packages-wheel:
     timeout-minutes: 80
     name: "Provider packages wheel (verify)"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     env:
       RUNS_ON: "${{needs.build-info.outputs.runs-on}}"
@@ -710,7 +704,7 @@ jobs:
   provider-airflow-compatibility-check:
     timeout-minutes: 80
     name: "Providers Airflow 2.4 compatibility check"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     env:
       RUNS_ON: "${{needs.build-info.outputs.runs-on}}"
@@ -777,7 +771,7 @@ jobs:
   prepare-install-provider-packages-sdist:
     timeout-minutes: 80
     name: "Provider packages sdist (install)"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     env:
       RUNS_ON: "${{needs.build-info.outputs.runs-on}}"
@@ -827,7 +821,7 @@ jobs:
   test-airflow-release-commands:
     timeout-minutes: 80
     name: "Test Airflow release commands"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     if: needs.build-info.outputs.runs-on == 'self-hosted'
     env:
@@ -862,7 +856,7 @@ jobs:
   tests-helm:
     timeout-minutes: 80
     name: "Unit tests Helm: ${{matrix.helm-test-package}}"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     strategy:
       fail-fast: false
@@ -906,7 +900,7 @@ jobs:
     name: >
       Postgres${{matrix.postgres-version}},Py${{matrix.python-version}}:
       ${{needs.build-info.outputs.parallel-test-types-list-as-string}}
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     strategy:
       matrix:
@@ -962,7 +956,7 @@ jobs:
       LatestBotoPostgres${{needs.build-info.outputs.default-postgres-version}},
       Py${{needs.build-info.outputs.default-python-version}}:
       ${{needs.build-info.outputs.parallel-test-types-list-as-string}}
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     env:
       RUNS_ON: "${{needs.build-info.outputs.runs-on}}"
@@ -1011,7 +1005,7 @@ jobs:
       InProgressDisabledPostgres${{needs.build-info.outputs.default-postgres-version}},
       Py${{needs.build-info.outputs.default-python-version}}:
       ${{needs.build-info.outputs.parallel-test-types-list-as-string}}
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     env:
       RUNS_ON: "${{needs.build-info.outputs.runs-on}}"
@@ -1059,7 +1053,7 @@ jobs:
     name: >
       MySQL${{matrix.mysql-version}}, Py${{matrix.python-version}}:
       ${{needs.build-info.outputs.parallel-test-types-list-as-string}}
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     strategy:
       matrix:
@@ -1111,7 +1105,7 @@ jobs:
     name: >
       MSSQL${{matrix.mssql-version}}, Py${{matrix.python-version}}:
       ${{needs.build-info.outputs.parallel-test-types-list-as-string}}
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     strategy:
       matrix:
@@ -1170,7 +1164,7 @@ jobs:
     timeout-minutes: 130
     name: >
       Sqlite Py${{matrix.python-version}}: ${{needs.build-info.outputs.parallel-test-types-list-as-string}}
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     strategy:
       matrix:
@@ -1218,7 +1212,7 @@ jobs:
   tests-integration-postgres:
     timeout-minutes: 130
     name: Integration Tests Postgres
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     env:
       RUNS_ON: "${{needs.build-info.outputs.runs-on}}"
@@ -1290,7 +1284,7 @@ jobs:
   tests-integration-mysql:
     timeout-minutes: 130
     name: Integration Tests MySQL
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images]
     env:
       RUNS_ON: "${{needs.build-info.outputs.runs-on}}"
@@ -1335,7 +1329,7 @@ jobs:
   tests-quarantined:
     timeout-minutes: 60
     name: "Quarantined tests"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     continue-on-error: true
     needs: [build-info, wait-for-ci-images]
     env:
@@ -1399,7 +1393,7 @@ jobs:
   summarize-warnings:
     timeout-minutes: 15
     name: "Summarize warnings"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs:
       - build-info
       - tests-postgres
@@ -1433,7 +1427,7 @@ jobs:
   wait-for-prod-images:
     timeout-minutes: 80
     name: "Wait for & verify PROD images"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-ci-images, build-prod-images]
     if: needs.build-info.outputs.image-build == 'true'
     env:
@@ -1475,7 +1469,7 @@ jobs:
   test-docker-compose-quick-start:
     timeout-minutes: 60
     name: "Test docker-compose quick start"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-prod-images]
     if: needs.build-info.outputs.image-build == 'true'
     env:
@@ -1503,7 +1497,7 @@ jobs:
   tests-kubernetes:
     timeout-minutes: 240
     name: "Helm: ${{matrix.executor}} - ${{needs.build-info.outputs.kubernetes-versions-list-as-string}}"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs: [build-info, wait-for-prod-images]
     strategy:
       matrix:
@@ -1573,7 +1567,7 @@ jobs:
       packages: write
     timeout-minutes: 80
     name: "Constraints"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs:
       - build-info
       - docs
@@ -1646,7 +1640,7 @@ jobs:
   push-buildx-cache-to-github-registry:
     timeout-minutes: 50
     name: "Push Image Cache"
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs:
       - build-info
       - constraints
@@ -1740,7 +1734,7 @@ jobs:
     name: >
       Build CI ARM images
       ${{needs.build-info.outputs.all-python-versions-list-as-string}}
-    runs-on: [self-hosted, small]
+    runs-on: ${{ needs.build-info.outputs.runs-on }}
     needs:
       - build-info
       - wait-for-ci-images
