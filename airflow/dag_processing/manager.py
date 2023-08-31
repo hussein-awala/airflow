@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import collections
+import contextlib
 import enum
 import importlib
 import inspect
@@ -181,12 +182,10 @@ class DagFileProcessorAgent(LoggingMixin, MultiprocessingStartMethodMixin):
         if not self._process.is_alive():
             return
 
-        try:
+        with contextlib.suppress(ConnectionError):
+            # suppress ConnectionError: If this died cos of an error then we will
+            # notice and restart when harvest_serialized_dags calls _heartbeat_manager.
             self._parent_signal_conn.send(DagParsingSignal.AGENT_RUN_ONCE)
-        except ConnectionError:
-            # If this died cos of an error then we will noticed and restarted
-            # when harvest_serialized_dags calls _heartbeat_manager.
-            pass
 
     def get_callbacks_pipe(self) -> MultiprocessingConnection:
         """Return the pipe for sending Callbacks to DagProcessorManager."""
@@ -330,10 +329,8 @@ class DagFileProcessorAgent(LoggingMixin, MultiprocessingStartMethodMixin):
         """Send termination signal to DAG parsing processor manager to terminate all DAG file processors."""
         if self._process and self._process.is_alive():
             self.log.info("Sending termination message to manager.")
-            try:
+            with contextlib.suppress(ConnectionError):
                 self._parent_signal_conn.send(DagParsingSignal.TERMINATE_MANAGER)
-            except ConnectionError:
-                pass
 
     def end(self):
         """Terminate (and then kill) the manager process launched."""

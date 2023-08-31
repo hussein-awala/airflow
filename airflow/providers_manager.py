@@ -18,6 +18,7 @@
 """Manages all providers."""
 from __future__ import annotations
 
+import contextlib
 import fnmatch
 import functools
 import inspect
@@ -119,10 +120,8 @@ class LazyDictWithCache(MutableMapping):
 
     def __delitem__(self, key):
         self._raw_dict.__delitem__(key)
-        try:
+        with contextlib.suppress(KeyError):
             self._resolved.remove(key)
-        except KeyError:
-            pass
 
     def __iter__(self):
         return iter(self._raw_dict)

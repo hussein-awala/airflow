@@ -435,10 +435,8 @@ def task_run(args, dag: DAG | None = None) -> TaskReturnCode | None:
                 if task_return_code == TaskReturnCode.DEFERRED:
                     _set_task_deferred_context_var()
     finally:
-        try:
+        with suppress(Exception):
             get_listener_manager().hook.before_stopping(component=TaskCommandMarker())
-        except Exception:
-            pass
     return task_return_code
 
 

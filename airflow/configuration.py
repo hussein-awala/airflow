@@ -32,7 +32,7 @@ import sys
 import warnings
 from base64 import b64encode
 from configparser import ConfigParser, NoOptionError, NoSectionError
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from copy import deepcopy
 from json.decoder import JSONDecodeError
 from typing import IO, TYPE_CHECKING, Any, Dict, Generator, Iterable, Pattern, Set, Tuple, Union
@@ -1865,11 +1865,9 @@ class AirflowConfigParser(ConfigParser):
         # the cached values, and it will be refreshed on next access. This has been an implementation
         # detail in Python 3.8 but as of Python 3.9 it is documented behaviour.
         # See https://docs.python.org/3/library/functools.html#functools.cached_property
-        try:
+        with suppress(AttributeError):
+            # suppress AttributeError: no problem if cache is not set yet
             del self.sensitive_config_values
-        except AttributeError:
-            # no problem if cache is not set yet
-            pass
         self._providers_configuration_loaded = True
 
     @staticmethod

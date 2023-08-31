@@ -16,6 +16,7 @@
 # under the License.
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING, Any
 
 from flask import Response, request
@@ -99,10 +100,8 @@ def get_log(
 
     dag = get_airflow_app().dag_bag.get_dag(dag_id)
     if dag:
-        try:
+        with contextlib.suppress(TaskNotFound):
             ti.task = dag.get_task(ti.task_id)
-        except TaskNotFound:
-            pass
 
     return_type = request.accept_mimetypes.best_match(["text/plain", "application/json"])
 

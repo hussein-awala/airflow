@@ -18,6 +18,7 @@
 """Authentication backend."""
 from __future__ import annotations
 
+import contextlib
 import logging
 from importlib import import_module
 
@@ -30,10 +31,8 @@ log = logging.getLogger(__name__)
 def load_auth():
     """Load authentication backends."""
     auth_backends = "airflow.api.auth.backend.default"
-    try:
+    with contextlib.suppress(AirflowConfigException):
         auth_backends = conf.get("api", "auth_backends")
-    except AirflowConfigException:
-        pass
 
     backends = []
     for backend in auth_backends.split(","):
