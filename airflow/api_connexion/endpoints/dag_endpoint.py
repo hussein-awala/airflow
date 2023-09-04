@@ -60,6 +60,17 @@ def get_dag(*, dag_id: str, session: Session = NEW_SESSION) -> APIResponse:
     return dag_schema.dump(dag)
 
 
+# @provide_async_session
+# async def get_dag(*, dag_id: str, session: AsyncSession = NEW_ASYNC_SESSION) -> APIResponse:
+#     """Get basic information about a DAG."""
+#     dag = await session.scalar(select(DagModel).where(DagModel.dag_id == dag_id))
+#
+#     if dag is None:
+#         raise NotFound("DAG not found", detail=f"The DAG with dag_id: {dag_id} was not found")
+#
+#     yield dag_schema.dump(dag)
+
+
 @security.requires_access_dag("GET")
 @provide_session
 def get_dag_details(*, dag_id: str, session: Session = NEW_SESSION) -> APIResponse:

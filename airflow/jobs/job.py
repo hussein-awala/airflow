@@ -39,11 +39,19 @@ from airflow.utils.helpers import convert_camel_to_snake
 from airflow.utils.log.logging_mixin import LoggingMixin
 from airflow.utils.net import get_hostname
 from airflow.utils.platform import getuser
-from airflow.utils.session import NEW_SESSION, provide_session
+from airflow.utils.session import (
+    NEW_ASYNC_SESSION,
+    NEW_SESSION,
+    provide_async_session,
+    provide_session,
+)
 from airflow.utils.sqlalchemy import UtcDateTime
 from airflow.utils.state import JobState
 
 if TYPE_CHECKING:
+    import datetime
+
+    from sqlalchemy.ext.asyncio import AsyncSession
     import datetime
 
     from sqlalchemy.orm.session import Session
@@ -365,6 +373,29 @@ def most_recent_job(job_type: str, session: Session = NEW_SESSION) -> Job | JobP
     :param session: Database session
     """
     return session.scalar(
+        select(Job)
+        .where(Job.job_type == job_type)
+        .order_by(
+            # Put "running" jobs at the front.
+            case({JobState.RUNNING: 0}, value=Job.state, else_=1),
+            Job.latest_heartbeat.desc(),
+        )
+        .limit(1)
+    )
+
+
+@provide_async_session
+async def async_most_recent_job(job_type: str, session: AsyncSession = NEW_ASYNC_SESSION) -> Job | None:
+    """
+    Return the most recent job of this type, if any, based on last heartbeat received.
+
+    Jobs in "running" state take precedence over others to make sure alive
+    job is returned if it is available.
+
+    :param job_type: job type to query for to get the most recent job for
+    :param session: Database session
+    """
+    return await session.scalar(
         select(Job)
         .where(Job.job_type == job_type)
         .order_by(
