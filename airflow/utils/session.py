@@ -21,6 +21,7 @@ from functools import wraps
 from inspect import signature
 from typing import Callable, Generator, TypeVar, cast
 
+from sqlalchemy.ext.asyncio import AsyncSession as ASAsyncSession
 from sqlalchemy.orm import Session as SASession
 
 from airflow import settings
@@ -42,6 +43,23 @@ def create_session() -> Generator[SASession, None, None]:
         raise
     finally:
         session.close()
+
+
+@contextlib.asynccontextmanager
+async def create_async_session() -> Generator[ASAsyncSession, None, None]:
+    """Contextmanager that will create and teardown an async session."""
+    AsyncSession = getattr(settings, "AsyncSession", None)
+    if AsyncSession is None:
+        raise RuntimeError("AsyncSession must be set before!")
+    async_session = AsyncSession()
+    try:
+        yield async_session
+        await async_session.commit()
+    except Exception:
+        await async_session.rollback()
+        raise
+    finally:
+        await async_session.close()
 
 
 PS = ParamSpec("PS")
@@ -81,8 +99,30 @@ def provide_session(func: Callable[PS, RT]) -> Callable[PS, RT]:
     return wrapper
 
 
+def provide_async_session(func: Callable[PS, RT]) -> Callable[PS, RT]:
+    """
+    Provide an async session if it isn't provided.
+
+    If you want to reuse a session or run the function as part of a
+    database transaction, you pass it to the function, if not this wrapper
+    will create one and close it for you.
+    """
+    session_args_idx = find_session_idx(func)
+
+    @wraps(func)
+    async def wrapper(*args, **kwargs) -> RT:
+        if "async_session" in kwargs or session_args_idx < len(args):
+            yield func(*args, **kwargs)
+        else:
+            with await create_async_session() as session:
+                yield func(*args, session=session, **kwargs)
+
+    return wrapper
+
+
 # A fake session to use in functions decorated by provide_session. This allows
 # the 'session' argument to be of type Session instead of Session | None,
 # making it easier to type hint the function body without dealing with the None
 # case that can never happen at runtime.
 NEW_SESSION: SASession = cast(SASession, None)
+NEW_ASYNC_SESSION: ASAsyncSession = cast(ASAsyncSession, None)
