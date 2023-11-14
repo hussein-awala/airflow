@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import functools
 from typing import TYPE_CHECKING
 
 import pluggy
@@ -151,7 +152,6 @@ def make_plugin_from_local_settings(pm: pluggy.PluginManager, module, names: set
     :meta private:
     """
     import inspect
-    import textwrap
 
     import attr
 
@@ -169,16 +169,25 @@ def make_plugin_from_local_settings(pm: pluggy.PluginManager, module, names: set
         #  def dag_policy_name_mismatch_shim(dag):
         #      airflow_local_settings.dag_policy(dag)
         #
-        codestr = textwrap.dedent(
-            f"""
-            def {name}_name_mismatch_shim{desired_sig}:
-                return __target({' ,'.join(desired_sig.parameters)})
-            """
+        def name_mismatch_shim(*args, **kwargs):
+            return target(**kwargs)
+
+        wrapper_sig = inspect.signature(name_mismatch_shim).replace(
+            parameters=desired_sig.parameters.values()
         )
-        code = compile(codestr, "<policy-shim>", "single")
-        scope = {"__target": target}
-        exec(code, scope, scope)
-        return scope[f"{name}_name_mismatch_shim"]
+
+        # Rename the wrapper function to match the desired name
+        name_mismatch_shim.__name__ = f"{name}_name_mismatch_shim"
+
+        # Make sure the wrapper function has the correct signature
+        @functools.wraps(name_mismatch_shim)
+        def wrapper(*args, **kwargs):
+            return target(*args, **kwargs)
+
+        # Attach the signature to the wrapper function
+        setattr(wrapper, "__signature__", wrapper_sig)
+
+        return wrapper
 
     @attr.define(frozen=True)
     class AirflowLocalSettingsPolicy:
