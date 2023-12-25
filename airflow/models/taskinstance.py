@@ -62,7 +62,7 @@ from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import reconstructor, relationship
 from sqlalchemy.orm.attributes import NO_VALUE, set_committed_value
-from sqlalchemy.sql.expression import case
+from sqlalchemy.sql.expression import Select, case, select, tuple_
 
 from airflow import settings
 from airflow.api_internal.internal_api_call import internal_api_call
@@ -1373,6 +1373,13 @@ class TaskInstance(Base, LoggingMixin):
     def __hash__(self):
         return hash((self.task_id, self.dag_id, self.run_id, self.map_index))
 
+    def to_dict(self):
+        return {
+            field.name: getattr(self, field.name)
+            for field in self.__table__.columns
+            if isinstance(field, Column)
+        }
+
     @property
     def stats_tags(self) -> dict[str, str]:
         """Returns task instance tags."""
@@ -1712,6 +1719,30 @@ class TaskInstance(Base, LoggingMixin):
             return query.one_or_none()
 
         return None
+
+    @staticmethod
+    @provide_session
+    def get_task_instances(
+        task_ids: list[tuple[str, str, str, int]], load: bool = False, session: Session = NEW_SESSION
+    ) -> list[TaskInstance] | Select:
+        """
+        Returns a set of task instances matching the given list of task ids.
+
+        :param task_ids: list of task_ids tuples (dag_id, task_id, execution_date, map_index)
+        :param load: if True, returned instances will be fully loaded in memory, otherwise,
+        :param session: SQLAlchemy ORM Session
+        """
+        query = select(TaskInstance).where(
+            tuple_(
+                TaskInstance.dag_id,
+                TaskInstance.task_id,
+                TaskInstance.run_id,
+                TaskInstance.map_index,
+            ).in_(task_ids)
+        )
+        if not load:
+            return query
+        return session.scalars(query).all()
 
     @provide_session
     def refresh_from_db(self, session: Session = NEW_SESSION, lock_for_update: bool = False) -> None:

@@ -22,7 +22,7 @@ import inspect
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Collection, Iterable, Iterator, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import insert, select
 
 from airflow.compat.functools import cache
 from airflow.configuration import conf
@@ -604,14 +604,19 @@ class AbstractOperator(Templater, DAGNode):
             )
             indexes_to_map = range(current_max_mapping + 1, total_length)
 
+        tis_to_insert: list[dict] = []
         for index in indexes_to_map:
-            # TODO: Make more efficient with bulk_insert_mappings/bulk_save_mappings.
             ti = TaskInstance(self, run_id=run_id, map_index=index, state=state)
             self.log.debug("Expanding TIs upserted %s", ti)
             task_instance_mutation_hook(ti)
-            ti = session.merge(ti)
-            ti.refresh_from_task(self)  # session.merge() loses task information.
-            all_expanded_tis.append(ti)
+            tis_to_insert.append(ti.to_dict())
+
+        query = insert(TaskInstance).values(tis_to_insert)
+        session.execute(query)
+
+        tis_to_fetch = [(ti["dag_id"], ti["task_id"], ti["run_id"], ti["map_index"]) for ti in tis_to_insert]
+
+        all_expanded_tis = TaskInstance.get_task_instances(tis_to_fetch, load=True, session=session)
 
         # Coerce the None case to 0 -- these two are almost treated identically,
         # except the unmapped ti (if exists) is marked to different states.
