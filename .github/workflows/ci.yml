@@ -116,8 +116,6 @@ jobs:
       is-airflow-runner: ${{ steps.selective-checks.outputs.is-airflow-runner }}
       is-amd-runner: ${{ steps.selective-checks.outputs.is-amd-runner }}
       is-arm-runner: ${{ steps.selective-checks.outputs.is-arm-runner }}
-      is-vm-runner: ${{ steps.selective-checks.outputs.is-vm-runner }}
-      is-k8s-runner: ${{ steps.selective-checks.outputs.is-k8s-runner }}
       latest-versions-only: ${{ steps.selective-checks.outputs.latest-versions-only }}
       chicken-egg-providers: ${{ steps.selective-checks.outputs.chicken-egg-providers }}
       has-migrations: ${{ steps.selective-checks.outputs.has-migrations }}
@@ -167,7 +165,7 @@ jobs:
     needs: [build-info]
     uses: ./.github/workflows/basic-tests.yml
     with:
-      runs-on-as-json-public: ${{ needs.build-info.outputs.runs-on-as-json-public }}
+      runs-on-as-json-default: ${{ needs.build-info.outputs.runs-on-as-json-default }}
       run-www-tests: ${{needs.build-info.outputs.run-www-tests}}
       needs-api-codegen: ${{needs.build-info.outputs.needs-api-codegen}}
       default-python-version: ${{needs.build-info.outputs.default-python-version}}
