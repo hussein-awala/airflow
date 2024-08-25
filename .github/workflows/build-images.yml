@@ -76,8 +76,6 @@ jobs:
       is-airflow-runner: ${{ steps.selective-checks.outputs.is-airflow-runner }}
       is-amd-runner: ${{ steps.selective-checks.outputs.is-amd-runner }}
       is-arm-runner: ${{ steps.selective-checks.outputs.is-arm-runner }}
-      is-vm-runner: ${{ steps.selective-checks.outputs.is-vm-runner }}
-      is-k8s-runner: ${{ steps.selective-checks.outputs.is-k8s-runner }}
       chicken-egg-providers: ${{ steps.selective-checks.outputs.chicken-egg-providers }}
       target-commit-sha: "${{steps.discover-pr-merge-commit.outputs.target-commit-sha ||
           github.event.pull_request.head.sha ||
