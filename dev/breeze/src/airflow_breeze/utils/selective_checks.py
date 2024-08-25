@@ -42,6 +42,7 @@ from airflow_breeze.global_constants import (
     DEFAULT_POSTGRES_VERSION,
     DEFAULT_PYTHON_MAJOR_MINOR_VERSION,
     HELM_VERSION,
+    HUSSEIN_AWALA_AIRFLOW_GITHUB_REPOSITORY,
     KIND_VERSION,
     RUNS_ON_PUBLIC_RUNNER,
     RUNS_ON_SELF_HOSTED_ASF_RUNNER,
@@ -1107,7 +1108,10 @@ class SelectiveChecks:
 
     @cached_property
     def runs_on_as_json_default(self) -> str:
-        if self._github_repository == APACHE_AIRFLOW_GITHUB_REPOSITORY:
+        if self._github_repository in (
+            APACHE_AIRFLOW_GITHUB_REPOSITORY,
+            HUSSEIN_AWALA_AIRFLOW_GITHUB_REPOSITORY,
+        ):
             if self._is_canary_run():
                 return RUNS_ON_SELF_HOSTED_RUNNER
             if self._pr_labels and USE_PUBLIC_RUNNERS_LABEL in self._pr_labels:
@@ -1154,7 +1158,7 @@ class SelectiveChecks:
     @cached_property
     def runs_on_as_json_docs_build(self) -> str:
         if self._is_canary_run():
-            return RUNS_ON_SELF_HOSTED_ASF_RUNNER
+            return RUNS_ON_SELF_HOSTED_RUNNER
         else:
             return RUNS_ON_PUBLIC_RUNNER
 
@@ -1181,7 +1185,7 @@ class SelectiveChecks:
         # TODO: when we have it properly set-up with labels we should just check for
         #       "airflow-runner" presence in runs_on
         runs_on_array = json.loads(self.runs_on_as_json_default)
-        return "Linux" in runs_on_array and "X64" in runs_on_array and "self-hosted" in runs_on_array
+        return "self-hosted" in runs_on_array and "airflow-runner" in runs_on_array
 
     @cached_property
     def is_amd_runner(self) -> bool:
@@ -1220,20 +1224,6 @@ class SelectiveChecks:
                 for label in json.loads(self.runs_on_as_json_public)
             ]
         )
-
-    @cached_property
-    def is_vm_runner(self) -> bool:
-        """Whether the runner is VM runner (managed by airflow)."""
-        # TODO: when we have it properly set-up with labels we should just check for
-        #       "airflow-runner" presence in runs_on
-        return self.is_airflow_runner
-
-    @cached_property
-    def is_k8s_runner(self) -> bool:
-        """Whether the runner is K8s runner (managed by airflow)."""
-        # TODO: when we have it properly set-up with labels we should just check for
-        #       "k8s-runner" presence in runs_on
-        return False
 
     @cached_property
     def has_migrations(self) -> bool:
